@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-obsidian-950 text-slate-100 antialiased;
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(159, 122, 234, 0.10), transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(232, 199, 122, 0.07), transparent 40%);
+  background-attachment: fixed;
+}
+
+/* Frosted glass panel used across cards, sidebar, modals */
+.glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-strong {
+  background: linear-gradient(135deg, rgba(20, 21, 28, 0.92), rgba(12, 13, 18, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.gilt-text {
+  background: linear-gradient(135deg, #e8c77a 0%, #c89b5e 45%, #9f7aea 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gilt-btn {
+  background: linear-gradient(135deg, #e8c77a 0%, #c89b5e 45%, #9f7aea 100%);
+  color: #0c0d12;
+  font-weight: 600;
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+.gilt-btn:hover {
+  filter: brightness(1.08);
+}
+.gilt-btn:active {
+  transform: scale(0.98);
+}
+
+/* Thin custom scrollbar to match the premium aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Visible keyboard focus ring everywhere, glass-appropriate */
+:focus-visible {
+  outline: 2px solid #9f7aea;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
