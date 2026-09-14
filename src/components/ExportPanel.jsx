@@ -3,6 +3,24 @@ import { useStore } from '../store/useStore';
 import { CURRENCIES } from '../utils/constants';
 import { downloadCSV } from '../utils/format';
 
+// Transaction `description` (and, in principle, `category`) is free text
+// the user typed into TransactionModal — it is intentionally NOT
+// sanitized there, since it's just a string in the database at that
+// point. It only becomes dangerous here, where it gets concatenated into
+// an HTML string and handed to `document.write`. Escaping the five HTML
+// metacharacters at the point of injection (rather than at input time)
+// is the correct place to fix this: a description like
+// `<img src=x onerror=alert(document.cookie)>` must render as inert
+// text in the report, not execute as markup.
+const escapeHtml = (value) =>
+  String(value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+
 export default function ExportPanel() {
   const transactions = useStore((s) => s.transactions);
   const currency = useStore((s) => s.profile?.currency || "USD");
@@ -15,9 +33,9 @@ export default function ExportPanel() {
     const rows = transactions
       .map(
         (t) =>
-          `<tr><td>${t.date}</td><td>${t.description}</td><td>${t.category}</td><td style="color:${
+          `<tr><td>${escapeHtml(t.date)}</td><td>${escapeHtml(t.description)}</td><td>${escapeHtml(t.category)}</td><td style="color:${
             t.amount >= 0 ? '#059669' : '#DC2626'
-          }">${t.amount >= 0 ? '+' : '-'}$${Math.abs(t.amount).toFixed(2)}</td></tr>`
+          }">${t.amount >= 0 ? '+' : '-'}$${escapeHtml(Math.abs(t.amount).toFixed(2))}</td></tr>`
       )
       .join('');
     const html = `<html><head><title>Obsidian — Transaction Report</title>

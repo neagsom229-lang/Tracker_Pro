@@ -13,11 +13,15 @@ export default function RecurringManager() {
   const removeRecurring = useStore((s) => s.removeRecurring);
 
   const [form, setForm] = useState({ description: '', amount: '', category: 'rent', direction: 'expense', frequency: 'monthly' });
+  const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const amountNum = parseFloat(form.amount);
-    if (!form.description.trim() || !amountNum) return;
+    if (!form.description.trim()) return setError('Add a short description.');
+    if (!amountNum || amountNum <= 0) return setError('Enter an amount greater than zero.');
+
+    setError('');
     addRecurring({
       description: form.description.trim(),
       amount: form.direction === 'income' ? amountNum : -amountNum,
@@ -112,6 +116,7 @@ export default function RecurringManager() {
             <Plus size={16} />
           </button>
         </div>
+        {error && <p className="text-xs text-expense">{error}</p>}
       </form>
     </div>
   );

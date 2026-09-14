@@ -22,16 +22,36 @@ import { addInterval, todayISO } from '../utils/recurrence';
  *    what went wrong — the UI never silently "loses" or fakes data.
  */
 
+// Module-level (not store state) on purpose: guards the very first data
+// load against running twice. On an already-logged-in page load,
+// `getSession()` resolving AND `onAuthStateChange` firing its initial
+// event (Supabase v2 calls the listener once immediately on subscribe,
+// with whatever session already exists, in addition to the separate
+// getSession() promise below) can both observe "no session yet → now
+// there's one" and each call initData() — two redundant parallel
+// fetches of the same data. This flag makes only the first of the two
+// actually trigger a fetch; every subsequent real sign-in (after an
+// explicit sign-out) still works normally since `initAuth` isn't
+// re-run per sign-in — `hasInitializedData` only needs to guard this
+// one startup race, not every future auth transition.
+let hasInitializedData = false;
+
 export const useStore = create((set, get) => ({
   // ---------------- Auth ----------------
   session: null, // Supabase `user` object once signed in, else null
   authLoading: true,
 
   initAuth: () => {
+    const initDataOnce = () => {
+      if (hasInitializedData) return;
+      hasInitializedData = true;
+      get().initData();
+    };
+
     // 1. Check for an existing session on first load (e.g. page refresh).
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session: session?.user ?? null, authLoading: false });
-      if (session?.user) get().initData();
+      if (session?.user) initDataOnce();
     });
 
     // 2. Subscribe to ALL future auth changes: login, logout, token
@@ -42,8 +62,13 @@ export const useStore = create((set, get) => ({
       const user = session?.user ?? null;
       const wasLoggedOut = !get().session;
       set({ session: user, authLoading: false });
-      if (user && wasLoggedOut) get().initData();
-      if (!user) set({ transactions: [], budgets: {}, recurring: [], profile: null });
+      if (user && wasLoggedOut) initDataOnce();
+      if (!user) {
+        // A real sign-out: reset the guard so a fresh sign-in (by the
+        // same or a different user, in the same tab) fetches again.
+        hasInitializedData = false;
+        set({ transactions: [], budgets: {}, recurring: [], profile: null });
+      }
     });
   },
 
@@ -144,6 +169,7 @@ export const useStore = create((set, get) => ({
     set({ budgets: updated });
     try {
       await dataProvider.removeBudget(userId, categoryId);
+      toast.success('Budget removed.');
     } catch (err) {
       set({ budgets: previous });
       toast.error(err.message);
@@ -168,6 +194,7 @@ export const useStore = create((set, get) => ({
     set({ recurring: previous.filter((r) => r.id !== id) });
     try {
       await dataProvider.removeRecurring(id);
+      toast.success('Recurring rule removed.');
     } catch (err) {
       set({ recurring: previous });
       toast.error(err.message);

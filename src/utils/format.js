@@ -19,16 +19,23 @@ export function formatDate(isoDate) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Wraps a single value in quotes and escapes any quote characters inside
+// it, per RFC 4180. Applied to every field (not just description) so the
+// CSV stays valid even if `category`/`type` ever contain a comma or
+// quote — today they're from a fixed constants list with neither, but
+// quoting every field is free insurance against that changing later.
+const csvField = (value) => `"${String(value).replace(/"/g, '""')}"`;
+
 export function toCSV(transactions) {
   const header = ['Date', 'Description', 'Category', 'Type', 'Amount (USD)'];
   const rows = transactions.map((t) => [
     t.date,
-    `"${t.description.replace(/"/g, '""')}"`,
+    t.description,
     t.category,
     t.amount >= 0 ? 'Income' : 'Expense',
     t.amount.toFixed(2),
-  ]);
-  return [header, ...rows].map((r) => r.join(',')).join('\n');
+  ].map(csvField));
+  return [header.map(csvField), ...rows].map((r) => r.join(',')).join('\n');
 }
 
 export function downloadCSV(transactions, filename = 'transactions.csv') {
