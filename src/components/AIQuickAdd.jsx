@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wand2, Loader2, Check, X, Sparkles } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import { useStore } from '../store/useStore';
 import { getCategory } from '../utils/constants';
@@ -12,14 +11,18 @@ import { formatMoney, formatDate } from '../utils/format';
  * ----------
  * Type "Spent $15 on lunch today" → a transaction appears.
  *
- * Two deliberate design decisions worth knowing before you change this:
+ * Two things worth knowing before you change this:
  *
- * 1. NOTHING IS SAVED UNTIL THE USER CONFIRMS. The parse result is shown
- *    as a one-line review card with an explicit Add button (Enter also
- *    confirms, so it's still a single keystroke). Language models are
- *    very good at this task and still occasionally wrong — and this is a
- *    finance app, where a silently-wrong row is worse than a small extra
- *    click. The AI removes the typing; the human keeps the commit.
+ * 1. THE ROW IS ALREADY SAVED BY THE TIME THE REVIEW CARD APPEARS. The
+ *    parse-transaction Edge Function inserts the transaction itself and
+ *    returns it — "Keep it" just clears the review UI, and "Discard"
+ *    issues a real delete. This trades the safety of a client-side
+ *    confirm-before-write for a simpler function contract; it means a
+ *    parse the user never revisits (they navigate away mid-review)
+ *    leaves a real row behind rather than nothing. If that turns out to
+ *    matter in practice, moving confirmation back to the client — parse
+ *    returns a draft, a separate endpoint or store action inserts it —
+ *    is the fix.
  *
  * 2. NO API KEY LIVES HERE. This component only ever calls our own
  *    Supabase Edge Function, authenticated with the user's own access
@@ -40,12 +43,16 @@ function localTodayISO() {
 const EXAMPLES = ['Spent $15 on lunch today', 'Grab to work 3.50', 'Got paid 1200 salary yesterday'];
 
 export default function AIQuickAdd() {
-  const addTransaction = useStore((s) => s.addTransaction);
+  // The Edge Function now inserts the row itself and returns it, so this
+  // component only needs to splice the confirmed result into local
+  // state -- calling the store's addTransaction() here would insert a
+  // second, duplicate row.
+  const receiveExternalTransaction = useStore((s) => s.receiveExternalTransaction);
   const currency = useStore((s) => s.profile?.currency || 'USD');
 
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [draft, setDraft] = useState(null); // parsed result awaiting confirmation
   const [error, setError] = useState('');
   const inputRef = useRef(null);
@@ -83,7 +90,7 @@ export default function AIQuickAdd() {
         throw new Error(body.error || "Couldn't read that. Try including an amount, e.g. \u201cSpent $15 on lunch\u201d.");
       }
 
-      setDraft(body);
+      setDraft(body); // { transaction, usage, mocked }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -91,29 +98,27 @@ export default function AIQuickAdd() {
     }
   };
 
-  const handleConfirm = async () => {
-    if (!draft || saving) return;
-    setSaving(true);
-    try {
-      await addTransaction({
-        description: draft.description,
-        // Store convention: income is positive, expense is negative.
-        // The function always returns a positive magnitude plus a type.
-        amount: draft.type === 'income' ? Math.abs(draft.amount) : -Math.abs(draft.amount),
-        category: draft.category,
-        date: draft.date,
-      });
-      setDraft(null);
-      setText('');
-      inputRef.current?.focus();
-    } catch {
-      // addTransaction already rolled back and toasted the failure.
-    } finally {
-      setSaving(false);
-    }
+  const handleConfirm = () => {
+    if (!draft) return;
+    // The row is already in Postgres (the function inserted it during
+    // Parse) -- this just makes the UI catch up. No network call, no
+    // chance of a duplicate insert.
+    receiveExternalTransaction(draft.transaction);
+    setDraft(null);
+    setText('');
+    inputRef.current?.focus();
   };
 
-  const handleDiscard = () => {
+  const removeTransaction = useStore((s) => s.deleteTransaction);
+
+  const handleDiscard = async () => {
+    // The row already exists in Postgres by this point (Parse inserted
+    // it), so "Discard" has to actually delete it -- otherwise it stays
+    // in the ledger even though the UI shows nothing was added.
+    if (!draft) return;
+    setDiscarding(true);
+    await removeTransaction(draft.transaction.id);
+    setDiscarding(false);
     setDraft(null);
     inputRef.current?.focus();
   };
@@ -127,8 +132,8 @@ export default function AIQuickAdd() {
     if (e.key === 'Escape' && draft) handleDiscard();
   };
 
-  const category = draft ? getCategory(draft.category) : null;
-  const signedAmount = draft ? (draft.type === 'income' ? Math.abs(draft.amount) : -Math.abs(draft.amount)) : 0;
+  const category = draft ? getCategory(draft.transaction.category) : null;
+  const signedAmount = draft ? draft.transaction.amount : 0;
 
   return (
     <div className="glass rounded-2xl p-4 sm:p-5 shadow-glass">
@@ -189,7 +194,7 @@ export default function AIQuickAdd() {
               exit={{ opacity: 0, y: -6 }}
               className="mt-3 rounded-xl border border-gilt-gold/25 bg-gilt-gold/5 p-3"
             >
-              <p className="text-[11px] text-slate-400 mb-2">Check this looks right, then add it:</p>
+              <p className="text-[11px] text-slate-400 mb-2">Saved -- check it looks right, or discard it:</p>
 
               <div className="flex items-center gap-3 flex-wrap">
                 <span
@@ -197,9 +202,9 @@ export default function AIQuickAdd() {
                   style={{ backgroundColor: category.color }}
                   aria-hidden="true"
                 />
-                <span className="text-sm text-slate-100 font-medium truncate max-w-[40%]">{draft.description}</span>
+                <span className="text-sm text-slate-100 font-medium truncate max-w-[40%]">{draft.transaction.description}</span>
                 <span className="text-xs text-slate-400">{category.label}</span>
-                <span className="text-xs text-slate-500">{formatDate(draft.date)}</span>
+                <span className="text-xs text-slate-500">{formatDate(draft.transaction.date)}</span>
                 <span
                   className={`text-sm font-semibold ml-auto ${signedAmount >= 0 ? 'text-income' : 'text-expense'}`}
                 >
@@ -210,17 +215,16 @@ export default function AIQuickAdd() {
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={handleConfirm}
-                  disabled={saving}
-                  className="gilt-btn rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5 disabled:opacity-60"
+                  className="gilt-btn rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5"
                 >
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                  {saving ? 'Adding…' : 'Add transaction'}
+                  <Check size={13} /> Keep it
                 </button>
                 <button
                   onClick={handleDiscard}
-                  className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-white/8 flex items-center gap-1.5"
+                  disabled={discarding}
+                  className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-white/8 flex items-center gap-1.5 disabled:opacity-60"
                 >
-                  <X size={13} /> Discard
+                  <X size={13} /> {discarding ? 'Removing…' : 'Discard'}
                 </button>
               </div>
             </motion.div>

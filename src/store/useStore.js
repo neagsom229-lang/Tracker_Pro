@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import { dataProvider } from '../lib/dataProvider';
 import { addInterval, todayISO } from '../utils/recurrence';
+import { TRANSFER_CATEGORY_IDS } from '../utils/constants';
 
 /**
  * useStore
@@ -108,7 +109,7 @@ export const useStore = create((set, get) => ({
         // A real sign-out: reset the guard so a fresh sign-in (by the
         // same or a different user, in the same tab) fetches again.
         hasInitializedData = false;
-        set({ transactions: [], budgets: {}, recurring: [], profile: null });
+        set({ transactions: [], budgets: {}, recurring: [], goals: [], debts: [], notifications: [], profile: null });
       }
     });
   },
@@ -139,6 +140,9 @@ export const useStore = create((set, get) => ({
   transactions: [],
   budgets: {}, // { [categoryId]: monthlyLimitUSD }
   recurring: [], // [{ id, description, amount, category, frequency, nextRunDate }]
+  goals: [], // [{ id, name, targetAmount, currentAmount, deadline }]
+  debts: [], // [{ id, name, balance, initialBalance, interestRate, minimumPayment }]
+  notifications: [], // newest first; written server-side, read/updated here
   profile: null, // { currency, displayName } — account settings only, not billing
   dataLoading: true,
   dataError: null,
@@ -148,13 +152,20 @@ export const useStore = create((set, get) => ({
     if (!userId) return;
     set({ dataLoading: true, dataError: null });
     try {
-      const [transactions, budgets, recurring, profile] = await Promise.all([
+      // One parallel round trip rather than seven sequential ones. Any
+      // single rejection fails the whole load, which is correct here:
+      // a dashboard showing transactions but silently missing goals is
+      // worse than an honest "couldn't reach your data" with a retry.
+      const [transactions, budgets, recurring, goals, debts, notifications, profile] = await Promise.all([
         dataProvider.getTransactions(userId),
         dataProvider.getBudgets(userId),
         dataProvider.getRecurring(userId),
+        dataProvider.getGoals(userId),
+        dataProvider.getDebts(userId),
+        dataProvider.getNotifications(userId),
         dataProvider.getProfile(userId),
       ]);
-      set({ transactions, budgets, recurring, profile, dataLoading: false });
+      set({ transactions, budgets, recurring, goals, debts, notifications, profile, dataLoading: false });
       get().processRecurring();
     } catch (err) {
       // Network failure or RLS/config issue — surface it instead of
@@ -165,6 +176,15 @@ export const useStore = create((set, get) => ({
   },
 
   // ---------------- Transaction CRUD (optimistic) ----------------
+  // A row that was inserted SERVER-SIDE (parse-transaction) and just
+  // needs the UI to catch up -- no network call, unlike addTransaction
+  // below which is responsible for the insert itself.
+  receiveExternalTransaction: (transaction) => {
+    if (get().transactions.some((t) => t.id === transaction.id)) return;
+    set({ transactions: [transaction, ...get().transactions] });
+  },
+
+
   addTransaction: async (payload) => {
     const userId = get().session.id;
     const tempId = `temp-${Date.now()}`;
@@ -322,6 +342,135 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  // ---------------- Savings goals (Pro) ----------------
+  addGoal: async (payload) => {
+    const userId = get().session.id;
+    try {
+      const saved = await dataProvider.addGoal(userId, payload);
+      set({ goals: [saved, ...get().goals] });
+      toast.success('Goal created.');
+      return saved;
+    } catch (err) {
+      toast.error(err.message);
+      throw err;
+    }
+  },
+
+  removeGoal: async (id) => {
+    const previous = get().goals;
+    set({ goals: previous.filter((g) => g.id !== id) });
+    try {
+      await dataProvider.removeGoal(id);
+      toast.success('Goal removed.');
+    } catch (err) {
+      set({ goals: previous });
+      toast.error(err.message);
+    }
+  },
+
+  // Deliberately NOT optimistic. Every other write in this store updates
+  // the UI first and rolls back on failure, which is right for a single
+  // row. This one moves two things at once (the goal balance and a new
+  // transaction), and the database is what guarantees they move
+  // together. Faking that pairing client-side would mean inventing a
+  // transaction id we'd have to reconcile, and showing a contribution
+  // that the RPC might still reject (goal deleted in another tab,
+  // amount rejected by a CHECK). A few hundred milliseconds of a
+  // disabled button is a fair price for never showing a contribution
+  // that didn't happen.
+  contributeToGoal: async (goalId, amount, date) => {
+    try {
+      const { goal, transaction } = await dataProvider.contributeToGoal(goalId, amount, date);
+      set({
+        goals: get().goals.map((g) => (g.id === goal.id ? goal : g)),
+        transactions: [transaction, ...get().transactions],
+      });
+      const reached = goal.currentAmount >= goal.targetAmount;
+      toast.success(reached ? `\u{1F389} "${goal.name}" is fully funded!` : 'Funds added.');
+      return goal;
+    } catch (err) {
+      toast.error(err.message);
+      throw err;
+    }
+  },
+
+  // ---------------- Debts (Pro) ----------------
+  addDebt: async (payload) => {
+    const userId = get().session.id;
+    try {
+      const saved = await dataProvider.addDebt(userId, payload);
+      set({ debts: [saved, ...get().debts] });
+      toast.success('Debt added.');
+      return saved;
+    } catch (err) {
+      toast.error(err.message);
+      throw err;
+    }
+  },
+
+  removeDebt: async (id) => {
+    const previous = get().debts;
+    set({ debts: previous.filter((d) => d.id !== id) });
+    try {
+      await dataProvider.removeDebt(id);
+      toast.success('Debt removed.');
+    } catch (err) {
+      set({ debts: previous });
+      toast.error(err.message);
+    }
+  },
+
+  // Same reasoning as contributeToGoal: two coupled writes, so the
+  // server is the only thing allowed to decide they happened.
+  logDebtPayment: async (debtId, amount, date) => {
+    try {
+      const { debt, transaction } = await dataProvider.logDebtPayment(debtId, amount, date);
+      set({
+        debts: get().debts.map((d) => (d.id === debt.id ? debt : d)),
+        transactions: [transaction, ...get().transactions],
+      });
+      toast.success(debt.balance === 0 ? `\u{1F389} "${debt.name}" is paid off!` : 'Payment logged.');
+      return debt;
+    } catch (err) {
+      toast.error(err.message);
+      throw err;
+    }
+  },
+
+  // ---------------- Notifications ----------------
+  // Inserts arrive here from the Realtime channel in useNotifications.
+  receiveNotification: (notification) => {
+    // Realtime can redeliver on reconnect, so guard against duplicates
+    // rather than trusting the channel to be exactly-once.
+    if (get().notifications.some((n) => n.id === notification.id)) return;
+    set({ notifications: [notification, ...get().notifications].slice(0, 50) });
+  },
+
+  markNotificationRead: async (id) => {
+    const previous = get().notifications;
+    set({ notifications: previous.map((n) => (n.id === id ? { ...n, read: true } : n)) });
+    try {
+      await dataProvider.markNotificationRead(id);
+    } catch (err) {
+      set({ notifications: previous });
+      toast.error(err.message);
+    }
+  },
+
+  markAllNotificationsRead: async () => {
+    const userId = get().session?.id;
+    if (!userId) return;
+    const previous = get().notifications;
+    if (!previous.some((n) => !n.read)) return;
+    set({ notifications: previous.map((n) => ({ ...n, read: true })) });
+    try {
+      await dataProvider.markAllNotificationsRead(userId);
+    } catch (err) {
+      set({ notifications: previous });
+      toast.error(err.message);
+    }
+  },
+
   // ---------------- Settings / billing ----------------
   setCurrency: async (currency) => {
     const userId = get().session.id;
@@ -378,10 +527,14 @@ export const selectTotals = (transactions) => {
   return { totalIncome, totalExpenses, totalBalance: totalIncome - totalExpenses };
 };
 
+// Excludes transfer categories (savings, debt payments). Those are money
+// moving between your own pots, not consumption — leaving them in makes
+// "Savings" the largest slice of every disciplined user's spending pie,
+// which is both useless and actively discouraging.
 export const selectSpendingByCategory = (transactions) => {
   const map = {};
   transactions
-    .filter((t) => t.amount < 0)
+    .filter((t) => t.amount < 0 && !TRANSFER_CATEGORY_IDS.includes(t.category))
     .forEach((t) => {
       map[t.category] = (map[t.category] || 0) + Math.abs(t.amount);
     });
@@ -391,4 +544,40 @@ export const selectSpendingByCategory = (transactions) => {
 export const selectSpendingThisMonth = (transactions) => {
   const currentMonth = new Date().toISOString().slice(0, 7);
   return selectSpendingByCategory(transactions.filter((t) => t.date.slice(0, 7) === currentMonth));
+};
+
+export const selectGoalTotals = (goals) => {
+  const totalSaved = goals.reduce((sum, g) => sum + g.currentAmount, 0);
+  const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);
+  return {
+    totalSaved,
+    totalTarget,
+    progress: totalTarget > 0 ? totalSaved / totalTarget : 0,
+    completed: goals.filter((g) => g.currentAmount >= g.targetAmount).length,
+  };
+};
+
+export const selectDebtTotals = (debts) => {
+  const totalBalance = debts.reduce((sum, d) => sum + d.balance, 0);
+  const totalInitial = debts.reduce((sum, d) => sum + d.initialBalance, 0);
+  const totalMinimum = debts.reduce((sum, d) => sum + d.minimumPayment, 0);
+  return {
+    totalBalance,
+    totalInitial,
+    totalMinimum,
+    // How much of the original debt is gone. 1 = debt free.
+    payoffProgress: totalInitial > 0 ? (totalInitial - totalBalance) / totalInitial : 0,
+  };
+};
+
+export const selectUnreadCount = (notifications) => notifications.filter((n) => !n.read).length;
+
+// Filters transactions to a date window. `days: null` means all time.
+export const selectInRange = (transactions, days) => {
+  if (!days) return transactions;
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffISO = new Date(cutoff.getTime() - cutoff.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return transactions.filter((t) => t.date >= cutoffISO);
 };

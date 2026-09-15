@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Trash2 } from 'lucide-react';
 import { useStore, selectSpendingThisMonth } from '../store/useStore';
-import { CATEGORIES, getCategory } from '../utils/constants';
+import { BUDGETABLE_CATEGORIES, getCategory } from '../utils/constants';
 import { formatMoney } from '../utils/format';
 
 export default function BudgetProgress() {
@@ -18,7 +18,9 @@ export default function BudgetProgress() {
 
   const spending = useMemo(() => selectSpendingThisMonth(transactions), [transactions]);
   const budgetEntries = Object.entries(budgets);
-  const availableCategories = CATEGORIES.filter((c) => c.type === 'expense' && !budgets[c.id]);
+  // Savings and debt payments are transfers, not consumption — see the
+  // `transfer` flag in constants.js for why they're not budgetable.
+  const availableCategories = BUDGETABLE_CATEGORIES.filter((c) => !budgets[c.id]);
 
   const handleAdd = (e) => {
     e.preventDefault();

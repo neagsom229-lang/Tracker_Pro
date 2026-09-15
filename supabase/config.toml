@@ -1,0 +1,28 @@
+# Per-function gateway JWT verification.
+#
+# This is the actual fix for the CORS preflight error. A browser's
+# OPTIONS preflight never carries an Authorization header (that's CORS
+# spec behavior, not a bug), so when verify_jwt is true, Supabase's
+# gateway rejects the header-less preflight with 401 BEFORE your
+# function's own OPTIONS handler ever runs -- no amount of in-code CORS
+# handling can fix a rejection that happens before your code executes.
+#
+# parse-transaction now authenticates the caller itself (see the
+# getUser() call in index.ts), using the token forwarded on the actual
+# POST request, so turning the gateway check off does not remove
+# authentication -- it just moves the enforcement point from the
+# platform into the function, which the platform's own docs recommend
+# for exactly this situation.
+[functions.parse-transaction]
+verify_jwt = false
+
+# Unrelated to this fix, included for completeness so this file reflects
+# every function in the project:
+[functions.stripe-webhook]
+verify_jwt = false   # Stripe calls this with no Supabase session at all
+
+[functions.customer-portal]
+verify_jwt = true    # called from the logged-in app via fetch with the user's own token
+
+[functions.daily-digest]
+verify_jwt = false   # called by pg_cron with no session; gated by a shared secret instead

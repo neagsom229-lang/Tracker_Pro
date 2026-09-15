@@ -1,12 +1,16 @@
 import { motion } from 'framer-motion';
-import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Download, LogOut, Gem, CreditCard } from 'lucide-react';
+import {
+  LayoutGrid, ArrowLeftRight, PiggyBank, Target, Landmark, Repeat, Download, LogOut, Gem, CreditCard,
+} from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
   { id: 'budgets', label: 'Budgets', icon: PiggyBank, pro: true },
+  { id: 'goals', label: 'Goals', icon: Target, pro: true },
+  { id: 'debts', label: 'Debts', icon: Landmark, pro: true },
   { id: 'recurring', label: 'Recurring', icon: Repeat, pro: true },
   { id: 'export', label: 'Export Data', icon: Download, pro: true },
   { id: 'billing', label: 'Billing', icon: CreditCard },
@@ -45,6 +49,7 @@ export default function Sidebar({ activeView, onNavigate }) {
               <button
                 key={item.id}
                 onClick={() => handleClick(item)}
+                aria-current={active ? 'page' : undefined}
                 className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left
                   ${active ? 'text-slate-50' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
               >

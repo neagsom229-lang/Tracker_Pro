@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Gem, AlertCircle, RefreshCw } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import { useStore } from './store/useStore';
-import { refreshUntilPro } from './hooks/useProStatus';
+import { refreshUntilPro, useProStatus } from './hooks/useProStatus';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
 import Sidebar from './components/Sidebar';
@@ -11,6 +11,7 @@ import TopBar from './components/TopBar';
 import MobileNav from './components/MobileNav';
 import TransactionModal from './components/TransactionModal';
 import UpgradeModal from './components/UpgradeModal';
+import InstallPrompt from './components/InstallPrompt';
 import DashboardSkeleton from './components/skeletons/DashboardSkeleton';
 import TransactionListSkeleton from './components/skeletons/TransactionListSkeleton';
 
@@ -35,6 +36,8 @@ const BudgetProgress = lazy(() => import('./components/BudgetProgress'));
 const RecurringManager = lazy(() => import('./components/RecurringManager'));
 const ExportPanel = lazy(() => import('./components/ExportPanel'));
 const BillingPanel = lazy(() => import('./components/BillingPanel'));
+const GoalManager = lazy(() => import('./components/GoalManager'));
+const DebtManager = lazy(() => import('./components/DebtManager'));
 
 function LoadingScreen() {
   return (
@@ -76,10 +79,18 @@ const VIEWS = {
   dashboard: Dashboard,
   transactions: () => <TransactionList />,
   budgets: BudgetProgress,
+  goals: GoalManager,
+  debts: DebtManager,
   recurring: RecurringManager,
   export: ExportPanel,
   billing: BillingPanel,
 };
+
+// Views the user can only reach on the Pro plan. Kept here rather than
+// only in the nav components because nav is not a security boundary: a
+// stale `activeView` (say, a Pro user whose subscription lapses while the
+// tab is open) would otherwise keep rendering a paid panel indefinitely.
+const PRO_VIEWS = ['budgets', 'goals', 'debts', 'recurring', 'export'];
 
 export default function App() {
   const session = useStore((s) => s.session);
@@ -89,6 +100,7 @@ export default function App() {
   const dataError = useStore((s) => s.dataError);
   const initAuth = useStore((s) => s.initAuth);
   const initData = useStore((s) => s.initData);
+  const { isPro, loading: proLoading } = useProStatus();
 
   const [activeView, setActiveView] = useState('dashboard');
 
@@ -164,7 +176,12 @@ export default function App() {
   if (!session) return <AuthScreen />;
   if (dataError) return <DataErrorScreen message={dataError} onRetry={initData} />;
 
-  const ActiveComponent = VIEWS[activeView];
+  // Fall back to the dashboard if the current view is Pro-gated and the
+  // user isn't (or no longer is) Pro. `proLoading` is checked so the
+  // first render — before the subscription row has come back — doesn't
+  // bounce a genuine Pro user off the page they just opened.
+  const effectiveView = !proLoading && PRO_VIEWS.includes(activeView) && !isPro ? 'dashboard' : activeView;
+  const ActiveComponent = VIEWS[effectiveView];
 
   return (
     <div className="min-h-screen flex">
@@ -174,33 +191,34 @@ export default function App() {
           style: { background: '#13141B', color: '#E2E8F0', border: '1px solid rgba(255,255,255,0.08)' },
         }}
       />
-      <Sidebar activeView={activeView} onNavigate={setActiveView} />
+      <Sidebar activeView={effectiveView} onNavigate={setActiveView} />
 
       <main className="flex-1 p-5 md:p-8 pb-28 md:pb-8 max-w-6xl mx-auto w-full">
-        <TopBar activeView={activeView} />
+        <TopBar activeView={effectiveView} />
 
         {dataLoading ? (
-          activeView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />
+          effectiveView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />
         ) : (
-          <Suspense fallback={activeView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />}>
+          <Suspense fallback={effectiveView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />}>
             <AnimatePresence mode="wait">
               <motion.div
-                key={activeView}
+                key={effectiveView}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.25 }}
               >
-                <ActiveComponent />
+                <ActiveComponent onNavigate={setActiveView} />
               </motion.div>
             </AnimatePresence>
           </Suspense>
         )}
       </main>
 
-      <MobileNav activeView={activeView} onNavigate={setActiveView} />
+      <MobileNav activeView={effectiveView} onNavigate={setActiveView} />
       <TransactionModal />
       <UpgradeModal />
+      <InstallPrompt />
     </div>
   );
 }

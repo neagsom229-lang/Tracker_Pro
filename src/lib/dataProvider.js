@@ -43,6 +43,35 @@ const mapTransaction = (row) => ({
 // response payload and Postgres's work building it.
 const TRANSACTION_COLUMNS = 'id, description, amount, category, date, created_at';
 
+
+const mapGoal = (row) => ({
+  id: row.id,
+  name: row.name,
+  targetAmount: Number(row.target_amount),
+  currentAmount: Number(row.current_amount),
+  deadline: row.deadline,
+  createdAt: row.created_at,
+});
+
+const mapDebt = (row) => ({
+  id: row.id,
+  name: row.name,
+  balance: Number(row.balance),
+  initialBalance: Number(row.initial_balance),
+  interestRate: Number(row.interest_rate),
+  minimumPayment: Number(row.minimum_payment),
+  createdAt: row.created_at,
+});
+
+const mapNotification = (row) => ({
+  id: row.id,
+  title: row.title,
+  message: row.message,
+  type: row.type,
+  read: row.read,
+  createdAt: row.created_at,
+});
+
 export const dataProvider = {
   // ---------------- Transactions ----------------
   async getTransactions(userId) {
@@ -183,5 +212,122 @@ export const dataProvider = {
   async setCurrency(userId, currency) {
     const { error } = await supabase.from('profiles').update({ currency }).eq('id', userId);
     assertNoError(error, 'saving your currency preference');
+  },
+  // ---------------- Goals (Pro) ----------------
+  // `current_amount` is read here but never written here — contributions
+  // go through the contribute_to_goal RPC so the goal balance and the
+  // matching transaction row move together or not at all.
+  async getGoals(userId) {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('id, name, target_amount, current_amount, deadline, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'loading your goals');
+    return data.map(mapGoal);
+  },
+
+  async addGoal(userId, payload) {
+    const { data, error } = await supabase
+      .from('goals')
+      .insert({
+        user_id: userId,
+        name: payload.name,
+        target_amount: payload.targetAmount,
+        deadline: payload.deadline || null,
+      })
+      .select('id, name, target_amount, current_amount, deadline, created_at')
+      .single();
+    assertNoError(error, 'creating the goal');
+    return mapGoal(data);
+  },
+
+  async removeGoal(id) {
+    const { error } = await supabase.from('goals').delete().eq('id', id);
+    assertNoError(error, 'deleting the goal');
+  },
+
+  // Returns BOTH the updated goal and the transaction the database
+  // created, so the store can patch each slice without a refetch.
+  async contributeToGoal(goalId, amount, date) {
+    const { data, error } = await supabase.rpc('contribute_to_goal', {
+      p_goal_id: goalId,
+      p_amount: amount,
+      p_date: date ?? null,
+    });
+    assertNoError(error, 'adding funds to the goal');
+    return { goal: mapGoal(data.goal), transaction: mapTransaction(data.transaction) };
+  },
+
+  // ---------------- Debts (Pro) ----------------
+  async getDebts(userId) {
+    const { data, error } = await supabase
+      .from('debts')
+      .select('id, name, balance, initial_balance, interest_rate, minimum_payment, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    assertNoError(error, 'loading your debts');
+    return data.map(mapDebt);
+  },
+
+  async addDebt(userId, payload) {
+    const { data, error } = await supabase
+      .from('debts')
+      .insert({
+        user_id: userId,
+        name: payload.name,
+        balance: payload.balance,
+        initial_balance: payload.balance,
+        interest_rate: payload.interestRate || 0,
+        minimum_payment: payload.minimumPayment || 0,
+      })
+      .select('id, name, balance, initial_balance, interest_rate, minimum_payment, created_at')
+      .single();
+    assertNoError(error, 'adding the debt');
+    return mapDebt(data);
+  },
+
+  async removeDebt(id) {
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    assertNoError(error, 'deleting the debt');
+  },
+
+  async logDebtPayment(debtId, amount, date) {
+    const { data, error } = await supabase.rpc('log_debt_payment', {
+      p_debt_id: debtId,
+      p_amount: amount,
+      p_date: date ?? null,
+    });
+    assertNoError(error, 'logging the payment');
+    return { debt: mapDebt(data.debt), transaction: mapTransaction(data.transaction) };
+  },
+
+  // ---------------- Notifications ----------------
+  // Capped at 50: the bell dropdown shows a scrollable recent list, not
+  // an archive, and an unbounded fetch on every app load is a slow query
+  // waiting to happen for a long-lived account.
+  async getNotifications(userId) {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, title, message, type, read, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    assertNoError(error, 'loading notifications');
+    return data.map(mapNotification);
+  },
+
+  async markNotificationRead(id) {
+    const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
+    assertNoError(error, 'updating the notification');
+  },
+
+  async markAllNotificationsRead(userId) {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+    assertNoError(error, 'updating notifications');
   },
 };
