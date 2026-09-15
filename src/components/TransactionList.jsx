@@ -29,18 +29,24 @@ export default function TransactionList({ limit }) {
   }, [transactions, query, categoryFilter, limit]);
 
   return (
-    <div className="glass rounded-2xl p-5 shadow-glass">
-      <div className="flex items-center justify-between mb-4 gap-3">
+    <div className="glass rounded-2xl p-4 sm:p-5 shadow-glass">
+      {/* At 375px the title + a fixed 160px search box + the filter
+          button overflow the card, squashing the input to a few
+          unusable characters. Stacking below `sm` gives the search the
+          full width of the card on phones and keeps the original
+          single-row layout everywhere else. */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
         <h3 className="text-slate-100 font-medium">{limit ? 'Recent Transactions' : 'All Transactions'}</h3>
         {!limit && (
-          <div className="flex items-center gap-2">
-            <div className="relative">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search..."
-                className="bg-obsidian-800/60 border border-white/8 rounded-lg pl-8 pr-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none w-40"
+                aria-label="Search transactions"
+                className="bg-obsidian-800/60 border border-white/8 rounded-lg pl-8 pr-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition w-full sm:w-40"
               />
             </div>
             <button

@@ -2,6 +2,13 @@ node_modules/
 dist/
 .env
 .env.local
+.env.*.local
 .DS_Store
 *.log
 .vercel
+
+# Supabase CLI scratch state. Not secret, but it pins your project ref,
+# org id and pooler host into the repo for anyone who clones it — and it
+# is regenerated locally by `supabase link`, so there is no reason to
+# track it.
+supabase/.temp/

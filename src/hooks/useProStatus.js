@@ -74,7 +74,7 @@ async function fetchSubscription() {
 
   if (!user) {
     setState({ subscription: null, loading: false });
-    return;
+    return null;
   }
 
   const { data, error } = await supabase
@@ -87,6 +87,36 @@ async function fetchSubscription() {
 
   if (error) console.error('useProStatus: failed to load subscription', error.message);
   setState({ subscription: data ?? null, loading: false });
+  // Returned (not just stored) so callers like refreshUntilPro below can
+  // act on the result without racing the React state update.
+  return data ?? null;
+}
+
+/**
+ * refreshUntilPro()
+ * -----------------
+ * Used by App after the Stripe redirect lands on `?success=true`.
+ *
+ * The redirect and the Stripe webhook are two independent requests. The
+ * webhook is what writes the `subscriptions` row, and it frequently
+ * arrives a second or three AFTER the browser is already back on the
+ * dashboard. A single refetch at page load therefore often reads a row
+ * that doesn't exist yet, and the user who just paid sees a still-locked
+ * Pro UI — the classic "I paid, nothing happened" support ticket.
+ *
+ * So poll briefly instead. Realtime is still the long-term backstop: if
+ * we give up here, the channel opened in ensureStarted() will flip the
+ * UI whenever the row finally shows up.
+ *
+ * Resolves true if Pro unlocked within the window, false otherwise.
+ */
+export async function refreshUntilPro({ attempts = 6, delayMs = 1500 } = {}) {
+  for (let i = 0; i < attempts; i++) {
+    const row = await fetchSubscription();
+    if (row && ACTIVE_STATUSES.includes(row.status)) return true;
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return false;
 }
 
 // (Re)points the shared channel at `userId`. Always removes any existing

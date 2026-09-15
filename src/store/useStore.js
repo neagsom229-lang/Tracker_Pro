@@ -29,40 +29,81 @@ import { addInterval, todayISO } from '../utils/recurrence';
 // with whatever session already exists, in addition to the separate
 // getSession() promise below) can both observe "no session yet → now
 // there's one" and each call initData() — two redundant parallel
-// fetches of the same data. This flag makes only the first of the two
-// actually trigger a fetch; every subsequent real sign-in (after an
-// explicit sign-out) still works normally since `initAuth` isn't
-// re-run per sign-in — `hasInitializedData` only needs to guard this
-// one startup race, not every future auth transition.
+// fetches of the same data.
 let hasInitializedData = false;
+
+// Guards `initAuth` itself. React StrictMode runs every effect twice in
+// development, and App calls initAuth() from an effect — without this
+// flag that means two live onAuthStateChange subscriptions for the
+// lifetime of the tab, so every sign-in/token-refresh is handled twice.
+// (The previous `hasInitializedData` flag stopped the duplicate *data*
+// fetch but not the duplicate listener itself.)
+let authInitialized = false;
+
+// Read synchronously at module load, BEFORE supabase-js has a chance to
+// consume and clear the URL hash. A password-reset link arrives as
+// .../#access_token=...&type=recovery — if we waited for the
+// PASSWORD_RECOVERY event we'd sometimes render a flash of the
+// dashboard first. We check both: this for the no-flash case, and the
+// event below as the reliable backstop.
+function urlLooksLikeRecovery() {
+  if (typeof window === 'undefined') return false;
+  const hash = window.location.hash || '';
+  return hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+}
 
 export const useStore = create((set, get) => ({
   // ---------------- Auth ----------------
   session: null, // Supabase `user` object once signed in, else null
   authLoading: true,
 
+  // True while the user is mid password-reset. App renders
+  // ResetPasswordScreen instead of the dashboard when this is set, even
+  // though a (recovery) session technically exists.
+  recoveryMode: urlLooksLikeRecovery(),
+
   initAuth: () => {
+    if (authInitialized) return;
+    authInitialized = true;
+
     const initDataOnce = () => {
+      // Don't load the dashboard's data behind the reset-password
+      // screen — the user isn't going there yet, and the recovery
+      // session may be about to be signed out.
+      if (get().recoveryMode) return;
       if (hasInitializedData) return;
       hasInitializedData = true;
       get().initData();
     };
 
     // 1. Check for an existing session on first load (e.g. page refresh).
+    //    persistSession + autoRefreshToken in supabaseClient.js mean the
+    //    session is read back out of localStorage here, which is what
+    //    keeps the user logged in across refreshes. `authLoading` stays
+    //    true until this resolves so App shows the spinner rather than
+    //    flashing the login screen at an already-signed-in user.
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session: session?.user ?? null, authLoading: false });
       if (session?.user) initDataOnce();
     });
 
     // 2. Subscribe to ALL future auth changes: login, logout, token
-    // refresh, and the redirect-back from Google OAuth. This one
-    // listener is what makes AuthScreen's Supabase calls "just work"
-    // without it needing to touch the store directly.
-    supabase.auth.onAuthStateChange((_event, session) => {
+    // refresh, password recovery, and the redirect-back from Google
+    // OAuth. This one listener is what makes AuthScreen's Supabase calls
+    // "just work" without it needing to touch the store directly.
+    supabase.auth.onAuthStateChange((event, session) => {
       const user = session?.user ?? null;
       const wasLoggedOut = !get().session;
+
+      if (event === 'PASSWORD_RECOVERY') {
+        set({ session: user, authLoading: false, recoveryMode: true });
+        return;
+      }
+
       set({ session: user, authLoading: false });
+
       if (user && wasLoggedOut) initDataOnce();
+
       if (!user) {
         // A real sign-out: reset the guard so a fresh sign-in (by the
         // same or a different user, in the same tab) fetches again.
@@ -70,6 +111,24 @@ export const useStore = create((set, get) => ({
         set({ transactions: [], budgets: {}, recurring: [], profile: null });
       }
     });
+  },
+
+  // Called by ResetPasswordScreen once the new password is saved (or
+  // the user cancels). Clears the recovery flag and, if they're still
+  // signed in, loads their data so they land on a ready dashboard.
+  exitRecoveryMode: async () => {
+    set({ recoveryMode: false });
+    // Scrub any leftover recovery fragment from the address bar.
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/');
+    }
+    const { data } = await supabase.auth.getSession();
+    const user = data?.session?.user ?? null;
+    set({ session: user });
+    if (user && !hasInitializedData) {
+      hasInitializedData = true;
+      get().initData();
+    }
   },
 
   logout: async () => {
@@ -116,9 +175,11 @@ export const useStore = create((set, get) => ({
       const saved = await dataProvider.addTransaction(userId, payload);
       set({ transactions: get().transactions.map((t) => (t.id === tempId ? saved : t)) });
       toast.success('Transaction added!');
+      return saved;
     } catch (err) {
       set({ transactions: get().transactions.filter((t) => t.id !== tempId) });
       toast.error(err.message);
+      throw err;
     }
   },
 
