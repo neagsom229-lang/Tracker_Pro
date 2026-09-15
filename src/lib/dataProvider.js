@@ -32,12 +32,23 @@ const mapTransaction = (row) => ({
   createdAt: row.created_at,
 });
 
+// Every `.select()` call below names exact columns instead of '*'.
+// For the single-row insert/update calls this saves little (the
+// response is one row either way), but it's the same pattern
+// everywhere for consistency, and it's not just style: for
+// `getTransactions` specifically — the one query that can return
+// hundreds or thousands of rows as a user's history grows — trimming
+// unused columns (there's currently only `user_id`, which RLS already
+// scopes for us and the client never needs back) directly cuts the
+// response payload and Postgres's work building it.
+const TRANSACTION_COLUMNS = 'id, description, amount, category, date, created_at';
+
 export const dataProvider = {
   // ---------------- Transactions ----------------
   async getTransactions(userId) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('*')
+      .select(TRANSACTION_COLUMNS)
       .eq('user_id', userId)
       .order('date', { ascending: false });
     assertNoError(error, 'loading transactions');
@@ -54,7 +65,7 @@ export const dataProvider = {
         category: payload.category,
         date: payload.date,
       })
-      .select()
+      .select(TRANSACTION_COLUMNS)
       .single();
     assertNoError(error, 'adding the transaction');
     return mapTransaction(data);
@@ -70,7 +81,7 @@ export const dataProvider = {
         ...(changes.date !== undefined && { date: changes.date }),
       })
       .eq('id', id)
-      .select()
+      .select(TRANSACTION_COLUMNS)
       .single();
     assertNoError(error, 'updating the transaction');
     return mapTransaction(data);
@@ -84,7 +95,7 @@ export const dataProvider = {
 
   // ---------------- Budgets ----------------
   async getBudgets(userId) {
-    const { data, error } = await supabase.from('budgets').select('*').eq('user_id', userId);
+    const { data, error } = await supabase.from('budgets').select('category, monthly_limit').eq('user_id', userId);
     assertNoError(error, 'loading budgets');
     return Object.fromEntries(data.map((b) => [b.category, Number(b.monthly_limit)]));
   },
@@ -105,7 +116,7 @@ export const dataProvider = {
   async getRecurring(userId) {
     const { data, error } = await supabase
       .from('recurring_rules')
-      .select('*')
+      .select('id, description, amount, category, frequency, next_run_date')
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
     assertNoError(error, 'loading recurring rules');
@@ -130,7 +141,7 @@ export const dataProvider = {
         frequency: payload.frequency,
         next_run_date: payload.nextRunDate,
       })
-      .select()
+      .select('id, description, amount, category, frequency, next_run_date')
       .single();
     assertNoError(error, 'adding the recurring rule');
     return {
@@ -159,7 +170,7 @@ export const dataProvider = {
   // tables in migration 002 — see useProStatus() for how Pro status is
   // read now. This function only returns account-level settings.
   async getProfile(userId) {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    const { data, error } = await supabase.from('profiles').select('id, email, display_name, currency').eq('id', userId).single();
     assertNoError(error, 'loading your profile');
     return {
       id: data.id,

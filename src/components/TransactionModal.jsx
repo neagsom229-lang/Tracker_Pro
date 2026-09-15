@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { CATEGORIES } from '../utils/constants';
 
 const emptyForm = { description: '', amount: '', date: new Date().toISOString().slice(0, 10), category: 'food', direction: 'expense' };
@@ -13,6 +14,8 @@ export default function TransactionModal() {
   const closeTransactionModal = useStore((s) => s.closeTransactionModal);
   const addTransaction = useStore((s) => s.addTransaction);
   const updateTransaction = useStore((s) => s.updateTransaction);
+
+  useEscapeKey(isOpen, closeTransactionModal);
 
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');

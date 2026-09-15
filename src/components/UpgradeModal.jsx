@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { redirectToPaymentLink } from '../lib/stripe';
 
 const PRO_PERKS = [
@@ -17,6 +18,8 @@ export default function UpgradeModal() {
   const reason = useStore((s) => s.upgradeReason);
   const closeUpgradeModal = useStore((s) => s.closeUpgradeModal);
   const [loading, setLoading] = useState(false);
+
+  useEscapeKey(isOpen, closeUpgradeModal);
 
   // Sends the browser to the Stripe Payment Link (with our user's id
   // attached as client_reference_id) — there is no local "upgradeToPro()"

@@ -46,6 +46,25 @@ export default {
         '2xl': '1.25rem',
         '3xl': '1.75rem',
       },
+      keyframes: {
+        // A slow, subtle vertical drift — used on empty-state icons and
+        // decorative accents so they feel alive without being distracting.
+        float: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-6px)' },
+        },
+        // A soft pulsing glow, used behind primary CTAs / icon badges.
+        // Animates box-shadow spread + opacity rather than color, so it
+        // reads as "light breathing" rather than a color flash.
+        'glow-pulse': {
+          '0%, 100%': { boxShadow: '0 0 16px rgba(232,199,122,0.20)' },
+          '50%': { boxShadow: '0 0 32px rgba(232,199,122,0.45)' },
+        },
+      },
+      animation: {
+        float: 'float 6s ease-in-out infinite',
+        'glow-pulse': 'glow-pulse 3s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Trash2 } from 'lucide-react';
 import { useStore, selectSpendingThisMonth } from '../store/useStore';
@@ -14,15 +14,17 @@ export default function BudgetProgress() {
 
   const [newCategory, setNewCategory] = useState('food');
   const [newLimit, setNewLimit] = useState('');
+  const [error, setError] = useState('');
 
-  const spending = selectSpendingThisMonth(transactions);
+  const spending = useMemo(() => selectSpendingThisMonth(transactions), [transactions]);
   const budgetEntries = Object.entries(budgets);
   const availableCategories = CATEGORIES.filter((c) => c.type === 'expense' && !budgets[c.id]);
 
   const handleAdd = (e) => {
     e.preventDefault();
     const limit = parseFloat(newLimit);
-    if (!limit || limit <= 0) return;
+    if (!limit || limit <= 0) return setError('Enter a limit greater than zero.');
+    setError('');
     setBudget(newCategory, limit);
     setNewLimit('');
   };
@@ -39,13 +41,23 @@ export default function BudgetProgress() {
           const cat = getCategory(categoryId);
           const spent = spending[categoryId] || 0;
           const pct = Math.min((spent / limit) * 100, 100);
-          const over = spent > limit;
+          // Three tiers, matching the spec: green while comfortably under
+          // budget, amber once within striking distance (80%+), red once
+          // actually over. Using the raw (unclamped) ratio for the
+          // threshold checks — `pct` above is clamped to 100 for the bar
+          // width, but "over" should still mean *any* amount past 100%,
+          // not just exactly 100%.
+          const ratio = spent / limit;
+          const over = ratio > 1;
+          const nearLimit = !over && ratio >= 0.8;
+          const barColor = over ? 'bg-expense' : nearLimit ? 'bg-amber-400' : 'bg-income';
+          const labelColor = over ? 'text-expense' : nearLimit ? 'text-amber-400' : 'text-slate-400';
           return (
             <div key={categoryId}>
               <div className="flex items-center justify-between mb-1.5 text-sm">
                 <span className="text-slate-300">{cat.label}</span>
                 <div className="flex items-center gap-2">
-                  <span className={over ? 'text-expense' : 'text-slate-400'}>
+                  <span className={labelColor}>
                     {formatMoney(spent, currency)} / {formatMoney(limit, currency)}
                   </span>
                   <button
@@ -62,7 +74,7 @@ export default function BudgetProgress() {
                   initial={{ width: 0 }}
                   animate={{ width: `${pct}%` }}
                   transition={{ duration: 0.6, ease: 'easeOut' }}
-                  className={`h-full rounded-full ${over ? 'bg-expense' : 'bg-income'}`}
+                  className={`h-full rounded-full ${barColor}`}
                 />
               </div>
             </div>
@@ -96,6 +108,7 @@ export default function BudgetProgress() {
           </button>
         </form>
       )}
+      {error && <p className="text-xs text-expense mt-2">{error}</p>}
     </div>
   );
 }

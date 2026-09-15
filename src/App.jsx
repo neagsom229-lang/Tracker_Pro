@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Gem, AlertCircle, RefreshCw } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
@@ -8,16 +8,28 @@ import AuthScreen from './components/AuthScreen';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import MobileNav from './components/MobileNav';
-import Dashboard from './components/Dashboard';
-import TransactionList from './components/TransactionList';
-import BudgetProgress from './components/BudgetProgress';
-import RecurringManager from './components/RecurringManager';
-import ExportPanel from './components/ExportPanel';
-import BillingPanel from './components/BillingPanel';
 import TransactionModal from './components/TransactionModal';
 import UpgradeModal from './components/UpgradeModal';
 import DashboardSkeleton from './components/skeletons/DashboardSkeleton';
 import TransactionListSkeleton from './components/skeletons/TransactionListSkeleton';
+
+// Route-level code splitting: each view panel becomes its own JS chunk,
+// fetched only the first time the user actually navigates to it, instead
+// of all six shipping in the initial bundle. This matters most for:
+//  - Dashboard, which pulls in recharts (a genuinely large dependency)
+//  - Budgets / Recurring / Export, which are Pro-only — a free user who
+//    never upgrades never downloads that code at all
+// TransactionModal and UpgradeModal are deliberately NOT lazy: they're
+// used from every view (the "Add Transaction" button lives in TopBar
+// across the whole app) and are small, so splitting them would only add
+// a Suspense-fallback flicker on a frequent interaction for no real
+// bundle-size win.
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const TransactionList = lazy(() => import('./components/TransactionList'));
+const BudgetProgress = lazy(() => import('./components/BudgetProgress'));
+const RecurringManager = lazy(() => import('./components/RecurringManager'));
+const ExportPanel = lazy(() => import('./components/ExportPanel'));
+const BillingPanel = lazy(() => import('./components/BillingPanel'));
 
 function LoadingScreen() {
   return (
@@ -116,17 +128,19 @@ export default function App() {
         {dataLoading ? (
           activeView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />
         ) : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeView}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25 }}
-            >
-              <ActiveComponent />
-            </motion.div>
-          </AnimatePresence>
+          <Suspense fallback={activeView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeView}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25 }}
+              >
+                <ActiveComponent />
+              </motion.div>
+            </AnimatePresence>
+          </Suspense>
         )}
       </main>
 
