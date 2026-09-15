@@ -3,15 +3,9 @@ import { supabase } from './supabaseClient';
 /**
  * dataProvider.js (Supabase edition)
  * -----------------------------------
- * Same shape as the LocalStorage version this replaces — every function
- * is async and returns plain JS data — so the store layer barely changed.
- * The difference is these functions now hit Postgres via Supabase, and
- * Row Level Security on the server guarantees a user can only ever
- * receive/affect their own rows (see supabase/migrations/001_init_schema.sql).
- *
- * Every function throws a normal Error on failure. The store is
- * responsible for catching these and turning them into toast messages —
- * this file stays "dumb" on purpose so it's easy to unit test or swap.
+ * Every function is async and returns plain JS data; the store is
+ * responsible for catching errors and turning them into toasts. RLS on
+ * the server guarantees a user can only ever receive/affect their own rows.
  */
 
 function assertNoError(error, context) {
@@ -21,8 +15,6 @@ function assertNoError(error, context) {
   }
 }
 
-// Maps a DB row (snake_case) to the shape the rest of the app already
-// uses (camelCase) so components didn't need to change.
 const mapTransaction = (row) => ({
   id: row.id,
   description: row.description,
@@ -31,18 +23,6 @@ const mapTransaction = (row) => ({
   date: row.date,
   createdAt: row.created_at,
 });
-
-// Every `.select()` call below names exact columns instead of '*'.
-// For the single-row insert/update calls this saves little (the
-// response is one row either way), but it's the same pattern
-// everywhere for consistency, and it's not just style: for
-// `getTransactions` specifically — the one query that can return
-// hundreds or thousands of rows as a user's history grows — trimming
-// unused columns (there's currently only `user_id`, which RLS already
-// scopes for us and the client never needs back) directly cuts the
-// response payload and Postgres's work building it.
-const TRANSACTION_COLUMNS = 'id, description, amount, category, date, created_at';
-
 
 const mapGoal = (row) => ({
   id: row.id,
@@ -56,21 +36,16 @@ const mapGoal = (row) => ({
 const mapDebt = (row) => ({
   id: row.id,
   name: row.name,
-  balance: Number(row.balance),
   initialBalance: Number(row.initial_balance),
+  balance: Number(row.balance),
   interestRate: Number(row.interest_rate),
   minimumPayment: Number(row.minimum_payment),
   createdAt: row.created_at,
 });
 
-const mapNotification = (row) => ({
-  id: row.id,
-  title: row.title,
-  message: row.message,
-  type: row.type,
-  read: row.read,
-  createdAt: row.created_at,
-});
+const TRANSACTION_COLUMNS = 'id, description, amount, category, date, created_at';
+const GOAL_COLUMNS = 'id, name, target_amount, current_amount, deadline, created_at';
+const DEBT_COLUMNS = 'id, name, initial_balance, balance, interest_rate, minimum_payment, created_at';
 
 export const dataProvider = {
   // ---------------- Transactions ----------------
@@ -193,11 +168,117 @@ export const dataProvider = {
     assertNoError(error, 'removing the recurring rule');
   },
 
+  // ---------------- Savings goals (Pro) ----------------
+  async getGoals(userId) {
+    const { data, error } = await supabase
+      .from('goals')
+      .select(GOAL_COLUMNS)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    assertNoError(error, 'loading your goals');
+    return data.map(mapGoal);
+  },
+
+  async addGoal(userId, { name, targetAmount, deadline }) {
+    const { data, error } = await supabase
+      .from('goals')
+      .insert({
+        user_id: userId,
+        name,
+        target_amount: targetAmount,
+        current_amount: 0,
+        deadline: deadline || null,
+      })
+      .select(GOAL_COLUMNS)
+      .single();
+    assertNoError(error, 'creating the goal');
+    return mapGoal(data);
+  },
+
+  async removeGoal(id) {
+    const { error } = await supabase.from('goals').delete().eq('id', id);
+    assertNoError(error, 'removing the goal');
+  },
+
+  async contributeToGoal(id, delta) {
+    const { data: existing, error: readError } = await supabase
+      .from('goals')
+      .select('current_amount')
+      .eq('id', id)
+      .single();
+    assertNoError(readError, 'reading the goal');
+
+    const next = Number(existing.current_amount) + delta;
+
+    const { data, error } = await supabase
+      .from('goals')
+      .update({ current_amount: next })
+      .eq('id', id)
+      .select(GOAL_COLUMNS)
+      .single();
+    assertNoError(error, 'updating the goal');
+    return mapGoal(data);
+  },
+
+  // ---------------- Debts (Pro) ----------------
+  async getDebts(userId) {
+    const { data, error } = await supabase
+      .from('debts')
+      .select(DEBT_COLUMNS)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    assertNoError(error, 'loading your debts');
+    return data.map(mapDebt);
+  },
+
+  async addDebt(userId, { name, balance, interestRate, minimumPayment }) {
+    const { data, error } = await supabase
+      .from('debts')
+      .insert({
+        user_id: userId,
+        name,
+        initial_balance: balance,
+        balance,
+        interest_rate: interestRate,
+        minimum_payment: minimumPayment,
+      })
+      .select(DEBT_COLUMNS)
+      .single();
+    assertNoError(error, 'adding the debt');
+    return mapDebt(data);
+  },
+
+  async removeDebt(id) {
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    assertNoError(error, 'removing the debt');
+  },
+
+  // Payment is a DELTA. Same race caveat as contributeToGoal: this is a
+  // read-then-write, so two devices paying simultaneously could clobber
+  // each other. Fine for a single-user app; the production fix is a
+  // `log_debt_payment(debt_id, delta)` Postgres function doing
+  // `balance = GREATEST(balance - delta, 0)` atomically.
+  async logDebtPayment(id, amount) {
+    const { data: existing, error: readError } = await supabase
+      .from('debts')
+      .select('balance')
+      .eq('id', id)
+      .single();
+    assertNoError(readError, 'reading the debt');
+
+    const next = Math.max(Number(existing.balance) - amount, 0);
+
+    const { data, error } = await supabase
+      .from('debts')
+      .update({ balance: next })
+      .eq('id', id)
+      .select(DEBT_COLUMNS)
+      .single();
+    assertNoError(error, 'logging the payment');
+    return mapDebt(data);
+  },
+
   // ---------------- Profile / settings ----------------
-  // Billing fields (is_pro, stripe_customer_id, etc.) used to live here
-  // but were moved to dedicated `subscriptions` / `stripe_customers`
-  // tables in migration 002 — see useProStatus() for how Pro status is
-  // read now. This function only returns account-level settings.
   async getProfile(userId) {
     const { data, error } = await supabase.from('profiles').select('id, email, display_name, currency').eq('id', userId).single();
     assertNoError(error, 'loading your profile');
@@ -213,99 +294,8 @@ export const dataProvider = {
     const { error } = await supabase.from('profiles').update({ currency }).eq('id', userId);
     assertNoError(error, 'saving your currency preference');
   },
-  // ---------------- Goals (Pro) ----------------
-  // `current_amount` is read here but never written here — contributions
-  // go through the contribute_to_goal RPC so the goal balance and the
-  // matching transaction row move together or not at all.
-  async getGoals(userId) {
-    const { data, error } = await supabase
-      .from('goals')
-      .select('id, name, target_amount, current_amount, deadline, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    assertNoError(error, 'loading your goals');
-    return data.map(mapGoal);
-  },
-
-  async addGoal(userId, payload) {
-    const { data, error } = await supabase
-      .from('goals')
-      .insert({
-        user_id: userId,
-        name: payload.name,
-        target_amount: payload.targetAmount,
-        deadline: payload.deadline || null,
-      })
-      .select('id, name, target_amount, current_amount, deadline, created_at')
-      .single();
-    assertNoError(error, 'creating the goal');
-    return mapGoal(data);
-  },
-
-  async removeGoal(id) {
-    const { error } = await supabase.from('goals').delete().eq('id', id);
-    assertNoError(error, 'deleting the goal');
-  },
-
-  // Returns BOTH the updated goal and the transaction the database
-  // created, so the store can patch each slice without a refetch.
-  async contributeToGoal(goalId, amount, date) {
-    const { data, error } = await supabase.rpc('contribute_to_goal', {
-      p_goal_id: goalId,
-      p_amount: amount,
-      p_date: date ?? null,
-    });
-    assertNoError(error, 'adding funds to the goal');
-    return { goal: mapGoal(data.goal), transaction: mapTransaction(data.transaction) };
-  },
-
-  // ---------------- Debts (Pro) ----------------
-  async getDebts(userId) {
-    const { data, error } = await supabase
-      .from('debts')
-      .select('id, name, balance, initial_balance, interest_rate, minimum_payment, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    assertNoError(error, 'loading your debts');
-    return data.map(mapDebt);
-  },
-
-  async addDebt(userId, payload) {
-    const { data, error } = await supabase
-      .from('debts')
-      .insert({
-        user_id: userId,
-        name: payload.name,
-        balance: payload.balance,
-        initial_balance: payload.balance,
-        interest_rate: payload.interestRate || 0,
-        minimum_payment: payload.minimumPayment || 0,
-      })
-      .select('id, name, balance, initial_balance, interest_rate, minimum_payment, created_at')
-      .single();
-    assertNoError(error, 'adding the debt');
-    return mapDebt(data);
-  },
-
-  async removeDebt(id) {
-    const { error } = await supabase.from('debts').delete().eq('id', id);
-    assertNoError(error, 'deleting the debt');
-  },
-
-  async logDebtPayment(debtId, amount, date) {
-    const { data, error } = await supabase.rpc('log_debt_payment', {
-      p_debt_id: debtId,
-      p_amount: amount,
-      p_date: date ?? null,
-    });
-    assertNoError(error, 'logging the payment');
-    return { debt: mapDebt(data.debt), transaction: mapTransaction(data.transaction) };
-  },
 
   // ---------------- Notifications ----------------
-  // Capped at 50: the bell dropdown shows a scrollable recent list, not
-  // an archive, and an unbounded fetch on every app load is a slow query
-  // waiting to happen for a long-lived account.
   async getNotifications(userId) {
     const { data, error } = await supabase
       .from('notifications')
@@ -314,20 +304,23 @@ export const dataProvider = {
       .order('created_at', { ascending: false })
       .limit(50);
     assertNoError(error, 'loading notifications');
-    return data.map(mapNotification);
+    return data.map((n) => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      read: n.read,
+      createdAt: n.created_at,
+    }));
   },
 
   async markNotificationRead(id) {
     const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
-    assertNoError(error, 'updating the notification');
+    assertNoError(error, 'updating that notification');
   },
 
   async markAllNotificationsRead(userId) {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('user_id', userId)
-      .eq('read', false);
-    assertNoError(error, 'updating notifications');
+    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+    assertNoError(error, 'updating your notifications');
   },
 };

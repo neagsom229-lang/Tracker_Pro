@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { CATEGORIES } from '../utils/constants';
+import ReceiptScanner from './ReceiptScanner';
 
 const emptyForm = { description: '', amount: '', date: new Date().toISOString().slice(0, 10), category: 'food', direction: 'expense' };
 
@@ -75,9 +76,25 @@ export default function TransactionModal() {
           >
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-medium text-slate-100">{editingId ? 'Edit Transaction' : 'Add Transaction'}</h3>
-              <button onClick={closeTransactionModal} className="text-slate-500 hover:text-slate-200" aria-label="Close">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                {!editingId && (
+                  <ReceiptScanner
+                    onScanned={(result) => {
+                      setForm({
+                        description: result.description,
+                        amount: result.amount.toString(),
+                        date: result.date,
+                        category: result.category,
+                        direction: CATEGORIES.find((c) => c.id === result.category)?.type || 'expense',
+                      });
+                      setError('');
+                    }}
+                  />
+                )}
+                <button onClick={closeTransactionModal} className="text-slate-500 hover:text-slate-200" aria-label="Close">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">

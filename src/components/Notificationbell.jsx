@@ -1,134 +1,89 @@
-import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, PiggyBank, Repeat, Target, Landmark, Info, CheckCheck } from 'lucide-react';
+import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Bell } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
-const TYPE_ICONS = {
-  budget: PiggyBank,
-  recurring: Repeat,
-  goal: Target,
-  debt: Landmark,
-  system: Info,
+const TYPE_DOT = {
+  budget_exceeded: 'bg-expense',
+  recurring_due: 'bg-amber-400',
+  goal_reached: 'bg-income',
+  info: 'bg-slate-500',
 };
 
-const TYPE_COLORS = {
-  budget: 'text-expense',
-  recurring: 'text-amber-400',
-  goal: 'text-income',
-  debt: 'text-gilt-purple',
-  system: 'text-slate-400',
-};
-
-function relativeTime(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const minutes = Math.round(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function timeAgo(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export default function NotificationBell() {
   const { notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useNotifications();
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef(null);
+  const [isOpen, setIsOpen] = useState(false);
 
-  useEscapeKey(open, () => setOpen(false));
-
-  // Click-outside to dismiss. Listening on mousedown rather than click
-  // so the panel closes before any button underneath receives its own
-  // click, which otherwise causes a visible flash of the panel closing
-  // and the underlying action firing in the same frame.
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  useEscapeKey(isOpen, () => setIsOpen(false));
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setIsOpen((v) => !v)}
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
-        aria-expanded={open}
-        aria-haspopup="true"
-        className="relative p-2.5 rounded-xl border border-white/8 text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors"
+        className="relative w-9 h-9 rounded-lg glass flex items-center justify-center text-slate-300 hover:text-slate-100"
       >
-        <Bell size={17} />
+        <Bell size={16} />
         {unreadCount > 0 && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-expense text-[10px] font-semibold text-obsidian-950 flex items-center justify-center"
-          >
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-expense text-[10px] font-medium text-white flex items-center justify-center">
             {unreadCount > 9 ? '9+' : unreadCount}
-          </motion.span>
+          </span>
         )}
       </button>
 
       <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.15 }}
-            role="dialog"
-            aria-label="Notifications"
-            // Anchored right and width-capped to the viewport so it can't
-            // overflow the screen edge on a 375px phone.
-            className="absolute right-0 top-full mt-2 w-[min(20rem,calc(100vw-2.5rem))] glass-strong rounded-2xl shadow-glass border border-white/8 z-40 overflow-hidden"
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-              <span className="text-sm font-medium text-slate-100">Notifications</span>
-              {unreadCount > 0 && (
-                <button
-                  onClick={markAllNotificationsRead}
-                  className="text-xs text-slate-400 hover:text-slate-100 flex items-center gap-1 transition-colors"
-                >
-                  <CheckCheck size={12} /> Mark all read
-                </button>
-              )}
-            </div>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.97 }}
+              transition={{ duration: 0.15 }}
+              className="absolute right-0 top-11 z-50 w-80 max-h-96 overflow-y-auto glass-strong rounded-2xl shadow-glass p-2"
+            >
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <span className="text-sm font-medium text-slate-200">Notifications</span>
+                {unreadCount > 0 && (
+                  <button onClick={markAllNotificationsRead} className="text-xs text-slate-500 hover:text-slate-300">
+                    Mark all read
+                  </button>
+                )}
+              </div>
 
-            <div className="max-h-80 overflow-y-auto overscroll-contain">
-              {notifications.length === 0 ? (
-                <p className="text-sm text-slate-500 px-4 py-8 text-center">
-                  Nothing yet. We'll let you know about budgets, bills and goals.
-                </p>
-              ) : (
-                notifications.map((n) => {
-                  const Icon = TYPE_ICONS[n.type] || Info;
-                  return (
-                    <button
-                      key={n.id}
-                      onClick={() => !n.read && markNotificationRead(n.id)}
-                      className={`w-full text-left flex gap-3 px-4 py-3 border-b border-white/5 last:border-0 transition-colors hover:bg-white/5 ${
-                        n.read ? 'opacity-60' : ''
-                      }`}
-                    >
-                      <Icon size={15} className={`shrink-0 mt-0.5 ${TYPE_COLORS[n.type] || 'text-slate-400'}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm text-slate-100 font-medium leading-snug">{n.title}</p>
-                          {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-gilt-gold shrink-0 mt-1.5" />}
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{n.message}</p>
-                        <p className="text-[11px] text-slate-600 mt-1">{relativeTime(n.createdAt)}</p>
-                      </div>
-                    </button>
-                  );
-                })
+              {notifications.length === 0 && (
+                <p className="text-sm text-slate-500 text-center py-8">You're all caught up.</p>
               )}
-            </div>
-          </motion.div>
+
+              {notifications.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => !n.read && markNotificationRead(n.id)}
+                  className={`w-full text-left flex items-start gap-2 rounded-xl px-2 py-2.5 transition-colors ${
+                    n.read ? 'hover:bg-white/5' : 'bg-white/5 hover:bg-white/8'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${TYPE_DOT[n.type] || TYPE_DOT.info}`} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm text-slate-200">{n.title}</span>
+                    <span className="block text-xs text-slate-500 truncate">{n.message}</span>
+                  </span>
+                  <span className="text-[10px] text-slate-600 shrink-0">{timeAgo(n.createdAt)}</span>
+                </button>
+              ))}
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

@@ -119,12 +119,14 @@ function CustomTooltip({ active, payload, currency }) {
   );
 }
 
-export default function TrendChart({ transactions, windowDays = 30, showForecast = true }) {
+export default function TrendChart({ transactions = [], windowDays = 30, showForecast = true }) {
   const currency = useStore((s) => s.profile?.currency || 'USD');
-  const recurring = useStore((s) => s.recurring);
+  const recurring = useStore((s) => s.recurring) ?? [];
 
   const { data, todayLabel, hasForecast } = useMemo(() => {
-    if (transactions.length === 0) return { data: [], todayLabel: null, hasForecast: false };
+    if (!transactions || transactions.length === 0) {
+      return { data: [], todayLabel: null, hasForecast: false };
+    }
 
     const { points, endingBalance, todayISO } = buildHistory(transactions, windowDays);
     const forecast = showForecast ? buildForecast(recurring, endingBalance, todayISO) : [];
@@ -142,7 +144,7 @@ export default function TrendChart({ transactions, windowDays = 30, showForecast
     };
   }, [transactions, windowDays, recurring, showForecast]);
 
-  if (transactions.length === 0) {
+  if (!transactions || transactions.length === 0) {
     return (
       <div className="h-64 flex flex-col items-center justify-center gap-3 text-sm text-slate-500 text-center px-4">
         <div className="w-16 h-16 rounded-full bg-gilt-gradient opacity-30 animate-glow-pulse" />
