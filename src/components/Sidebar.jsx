@@ -21,7 +21,7 @@ export default function Sidebar({ activeView, onNavigate }) {
   const profile = useStore((s) => s.profile);
   const logout = useStore((s) => s.logout);
   const openUpgradeModal = useStore((s) => s.openUpgradeModal);
-  const { isPro } = useProStatus(); // sourced from the `subscriptions` table, not local state
+const { isPro = false } = useProStatus(); // sourced from the `subscriptions` table, not local state
   const displayName = profile?.displayName || session?.email?.split('@')[0] || 'Guest';
 
   const handleClick = (item) => {

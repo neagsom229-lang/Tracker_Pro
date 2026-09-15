@@ -6,6 +6,14 @@ import { supabase } from './supabaseClient';
  * Every function is async and returns plain JS data; the store is
  * responsible for catching errors and turning them into toasts. RLS on
  * the server guarantees a user can only ever receive/affect their own rows.
+ *
+ * UPDATE PATTERN NOTE
+ * -------------------
+ * Do NOT chain `.update(...).select(...).single()` for goals/debts. The
+ * response body can come back trimmed (we observed a 15-byte body for a
+ * 7-column select), which poisons the mapper and the store's optimistic
+ * cache. Instead: update without requesting the row back, then read it
+ * back with a clean GET. Slightly more chatty, dramatically more reliable.
  */
 
 function assertNoError(error, context) {
@@ -76,18 +84,20 @@ export const dataProvider = {
   },
 
   async updateTransaction(id, changes) {
-    const { data, error } = await supabase
-      .from('transactions')
-      .update({
-        ...(changes.description !== undefined && { description: changes.description }),
-        ...(changes.amount !== undefined && { amount: changes.amount }),
-        ...(changes.category !== undefined && { category: changes.category }),
-        ...(changes.date !== undefined && { date: changes.date }),
-      })
-      .eq('id', id)
-      .select(TRANSACTION_COLUMNS)
-      .single();
+    const patch = {
+      ...(changes.description !== undefined && { description: changes.description }),
+      ...(changes.amount !== undefined && { amount: changes.amount }),
+      ...(changes.category !== undefined && { category: changes.category }),
+      ...(changes.date !== undefined && { date: changes.date }),
+    };
+    const { error } = await supabase.from('transactions').update(patch).eq('id', id);
     assertNoError(error, 'updating the transaction');
+    const { data, error: readBackError } = await supabase
+      .from('transactions')
+      .select(TRANSACTION_COLUMNS)
+      .eq('id', id)
+      .single();
+    assertNoError(readBackError, 'reading the updated transaction');
     return mapTransaction(data);
   },
 
@@ -200,6 +210,7 @@ export const dataProvider = {
     assertNoError(error, 'removing the goal');
   },
 
+  // Read-then-write with a clean read-back — see UPDATE PATTERN NOTE at top.
   async contributeToGoal(id, delta) {
     const { data: existing, error: readError } = await supabase
       .from('goals')
@@ -210,13 +221,18 @@ export const dataProvider = {
 
     const next = Number(existing.current_amount) + delta;
 
-    const { data, error } = await supabase
+    const { error: updateError } = await supabase
       .from('goals')
       .update({ current_amount: next })
-      .eq('id', id)
+      .eq('id', id);
+    assertNoError(updateError, 'updating the goal');
+
+    const { data, error: readBackError } = await supabase
+      .from('goals')
       .select(GOAL_COLUMNS)
+      .eq('id', id)
       .single();
-    assertNoError(error, 'updating the goal');
+    assertNoError(readBackError, 'reading the updated goal');
     return mapGoal(data);
   },
 
@@ -253,11 +269,12 @@ export const dataProvider = {
     assertNoError(error, 'removing the debt');
   },
 
-  // Payment is a DELTA. Same race caveat as contributeToGoal: this is a
-  // read-then-write, so two devices paying simultaneously could clobber
-  // each other. Fine for a single-user app; the production fix is a
-  // `log_debt_payment(debt_id, delta)` Postgres function doing
-  // `balance = GREATEST(balance - delta, 0)` atomically.
+  // Read-then-write with a clean read-back — see UPDATE PATTERN NOTE at top.
+  // Payment is a DELTA, not an absolute: two payments from two devices
+  // accumulate correctly, whereas writing an absolute would let the second
+  // clobber the first. For single-user this is fine; the fully-atomic
+  // version is a Postgres function `log_debt_payment(id, delta)` doing
+  // `balance = GREATEST(balance - delta, 0)` in one statement.
   async logDebtPayment(id, amount) {
     const { data: existing, error: readError } = await supabase
       .from('debts')
@@ -268,19 +285,28 @@ export const dataProvider = {
 
     const next = Math.max(Number(existing.balance) - amount, 0);
 
-    const { data, error } = await supabase
+    const { error: updateError } = await supabase
       .from('debts')
       .update({ balance: next })
-      .eq('id', id)
+      .eq('id', id);
+    assertNoError(updateError, 'logging the payment');
+
+    const { data, error: readBackError } = await supabase
+      .from('debts')
       .select(DEBT_COLUMNS)
+      .eq('id', id)
       .single();
-    assertNoError(error, 'logging the payment');
+    assertNoError(readBackError, 'reading the updated debt');
     return mapDebt(data);
   },
 
   // ---------------- Profile / settings ----------------
   async getProfile(userId) {
-    const { data, error } = await supabase.from('profiles').select('id, email, display_name, currency').eq('id', userId).single();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, display_name, currency')
+      .eq('id', userId)
+      .single();
     assertNoError(error, 'loading your profile');
     return {
       id: data.id,
@@ -320,7 +346,11 @@ export const dataProvider = {
   },
 
   async markAllNotificationsRead(userId) {
-    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', userId)
+      .eq('read', false);
     assertNoError(error, 'updating your notifications');
   },
 };
