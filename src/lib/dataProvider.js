@@ -234,4 +234,165 @@ export const dataProvider = {
     const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
     assertNoError(error, 'updating your notifications');
   },
+  // ---------------- Savings goals (Pro) ----------------
+  // Mapped to the shape the store already expects: targetAmount /
+  // currentAmount, not the DB's target_amount / current_amount.
+  async getGoals(userId) {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('id, name, target_amount, current_amount, deadline, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    assertNoError(error, 'loading your goals');
+    return data.map((g) => ({
+      id: g.id,
+      name: g.name,
+      targetAmount: Number(g.target_amount),
+      currentAmount: Number(g.current_amount),
+      deadline: g.deadline,
+      createdAt: g.created_at,
+    }));
+  },
+
+  async addGoal(userId, { name, targetAmount, deadline }) {
+    const { data, error } = await supabase
+      .from('goals')
+      .insert({ user_id: userId, name, target_amount: targetAmount, deadline: deadline ?? null })
+      .select('id, name, target_amount, current_amount, deadline, created_at')
+      .single();
+    assertNoError(error, 'creating the goal');
+    return {
+      id: data.id,
+      name: data.name,
+      targetAmount: Number(data.target_amount),
+      currentAmount: Number(data.current_amount),
+      deadline: data.deadline,
+      createdAt: data.created_at,
+    };
+  },
+
+  async removeGoal(id) {
+    const { error } = await supabase.from('goals').delete().eq('id', id);
+    assertNoError(error, 'removing the goal');
+  },
+
+  // `amount` is a DELTA (see useStore's contributeToGoal), so this reads
+  // the current balance and writes current + amount, rather than trusting
+  // a value computed on the client. There's a small window between the
+  // read and the write where a second contribution (another tab, another
+  // device) could read the same starting value and one increment could
+  // get lost -- fine for a single user's own casual use, but if that ever
+  // becomes a real problem, the fix is a Postgres RPC that does the
+  // increment atomically in one statement instead of two round trips.
+  async contributeToGoal(id, amount) {
+    const { data: current, error: fetchError } = await supabase
+      .from('goals')
+      .select('current_amount')
+      .eq('id', id)
+      .single();
+    assertNoError(fetchError, 'finding that goal');
+
+    const newAmount = Number(current.current_amount) + amount;
+
+    const { data, error } = await supabase
+      .from('goals')
+      .update({ current_amount: newAmount })
+      .eq('id', id)
+      .select('id, name, target_amount, current_amount, deadline, created_at')
+      .single();
+    assertNoError(error, 'adding your contribution');
+    return {
+      id: data.id,
+      name: data.name,
+      targetAmount: Number(data.target_amount),
+      currentAmount: Number(data.current_amount),
+      deadline: data.deadline,
+      createdAt: data.created_at,
+    };
+  },
+
+  // ---------------- Debts (Pro) ----------------
+  async getDebts(userId) {
+    const { data, error } = await supabase
+      .from('debts')
+      .select('id, name, initial_balance, balance, interest_rate, minimum_payment, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    assertNoError(error, 'loading your debts');
+    return data.map((d) => ({
+      id: d.id,
+      name: d.name,
+      initialBalance: Number(d.initial_balance),
+      balance: Number(d.balance),
+      interestRate: Number(d.interest_rate),
+      minimumPayment: Number(d.minimum_payment),
+      createdAt: d.created_at,
+    }));
+  },
+
+  // initial_balance is set equal to the starting balance and never
+  // touched again -- it's what DebtRow's progress bar measures against.
+  async addDebt(userId, { name, balance, interestRate, minimumPayment }) {
+    const { data, error } = await supabase
+      .from('debts')
+      .insert({
+        user_id: userId,
+        name,
+        initial_balance: balance,
+        balance,
+        interest_rate: interestRate,
+        minimum_payment: minimumPayment,
+      })
+      .select('id, name, initial_balance, balance, interest_rate, minimum_payment, created_at')
+      .single();
+    assertNoError(error, 'adding the debt');
+    return {
+      id: data.id,
+      name: data.name,
+      initialBalance: Number(data.initial_balance),
+      balance: Number(data.balance),
+      interestRate: Number(data.interest_rate),
+      minimumPayment: Number(data.minimum_payment),
+      createdAt: data.created_at,
+    };
+  },
+
+  async removeDebt(id) {
+    const { error } = await supabase.from('debts').delete().eq('id', id);
+    assertNoError(error, 'removing the debt');
+  },
+
+  // Same read-then-write shape as contributeToGoal, and the same small
+  // race-condition caveat applies. Clamped at 0 to match both the
+  // store's own optimistic update (Math.max(balance - amount, 0)) and
+  // the `balance >= 0` CHECK constraint on the table -- without the
+  // clamp, an overpayment here would be rejected by Postgres with a
+  // constraint-violation error instead of just settling at "paid off".
+  async logDebtPayment(id, amount) {
+    const { data: current, error: fetchError } = await supabase
+      .from('debts')
+      .select('balance')
+      .eq('id', id)
+      .single();
+    assertNoError(fetchError, 'finding that debt');
+
+    const newBalance = Math.max(Number(current.balance) - amount, 0);
+
+    const { data, error } = await supabase
+      .from('debts')
+      .update({ balance: newBalance })
+      .eq('id', id)
+      .select('id, name, initial_balance, balance, interest_rate, minimum_payment, created_at')
+      .single();
+    assertNoError(error, 'logging the payment');
+    return {
+      id: data.id,
+      name: data.name,
+      initialBalance: Number(data.initial_balance),
+      balance: Number(data.balance),
+      interestRate: Number(data.interest_rate),
+      minimumPayment: Number(data.minimum_payment),
+      createdAt: data.created_at,
+    };
+  },
 };

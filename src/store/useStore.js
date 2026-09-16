@@ -140,6 +140,18 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  // Used by AIQuickAdd: the Edge Function already inserted the row
+  // server-side, so this just splices the returned row into local
+  // state — no network call, no optimistic insert, nothing to roll
+  // back, and a duplicate-guard in case the same row arrives twice.
+  receiveExternalTransaction: (tx) => {
+    if (!tx?.id) return;
+    set((state) => {
+      if (state.transactions.some((t) => t.id === tx.id)) return state;
+      return { transactions: [tx, ...state.transactions] };
+    });
+  },
+
   // ---------------- Budgets (Pro) ----------------
   setBudget: async (categoryId, limitUSD) => {
     const userId = get().session.id;
@@ -300,13 +312,6 @@ export const useStore = create((set, get) => ({
   },
 
   // ---------------- Debts (Pro) ----------------
-  // A debt carries two amounts: `initialBalance` (what you owed when you
-  // added it — never changes) and `balance` (what you owe now — shrinks
-  // with every payment). DebtRow uses the pair to render progress.
-  // `logDebtPayment` takes a DELTA, not an absolute — same reasoning as
-  // `contributeToGoal`: two payments from two devices accumulate
-  // correctly, whereas writing an absolute would let the second clobber
-  // the first.
   addDebt: async ({ name, balance, interestRate, minimumPayment }) => {
     const userId = get().session.id;
     const tempId = `temp-${Date.now()}`;
@@ -471,10 +476,6 @@ export const selectGoalTotals = (goals) => {
   };
 };
 
-// `payoffProgress` is intentionally clamped to [0, 1]: a user who has
-// edited a balance upward (a new charge on a card they'd nearly paid off)
-// would otherwise push progress negative, and the header "…% paid off"
-// reading "-4%" is worse than reading "0%".
 export const selectDebtTotals = (debts) => {
   const totalBalance = debts.reduce((s, d) => s + (d.balance || 0), 0);
   const totalInitial = debts.reduce((s, d) => s + (d.initialBalance || 0), 0);
