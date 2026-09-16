@@ -1,6 +1,6 @@
 import { Plus } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import NotificationBell from './Notificationbell';
+import NotificationBell from './NotificationBell';
 
 const TITLES = {
   dashboard: 'Dashboard',
@@ -9,9 +9,10 @@ const TITLES = {
   recurring: 'Recurring',
   export: 'Export Data',
   billing: 'Billing',
+  admin: 'Admin — Payments',
 };
 
-const HIDE_ADD_BUTTON_ON = ['billing', 'export'];
+const HIDE_ADD_BUTTON_ON = ['billing', 'export', 'admin'];
 
 export default function TopBar({ activeView }) {
   const openTransactionModal = useStore((s) => s.openTransactionModal);

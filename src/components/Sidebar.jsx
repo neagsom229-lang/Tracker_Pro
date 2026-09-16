@@ -1,16 +1,12 @@
 import { motion } from 'framer-motion';
-import {
-  LayoutGrid, ArrowLeftRight, PiggyBank, Target, Landmark, Repeat, Download, LogOut, Gem, CreditCard,
-} from 'lucide-react';
+import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Download, LogOut, Gem, CreditCard, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
 
-export const NAV_ITEMS = [
+const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
   { id: 'budgets', label: 'Budgets', icon: PiggyBank, pro: true },
-  { id: 'goals', label: 'Goals', icon: Target, pro: true },
-  { id: 'debts', label: 'Debts', icon: Landmark, pro: true },
   { id: 'recurring', label: 'Recurring', icon: Repeat, pro: true },
   { id: 'export', label: 'Export Data', icon: Download, pro: true },
   { id: 'billing', label: 'Billing', icon: CreditCard },
@@ -21,8 +17,14 @@ export default function Sidebar({ activeView, onNavigate }) {
   const profile = useStore((s) => s.profile);
   const logout = useStore((s) => s.logout);
   const openUpgradeModal = useStore((s) => s.openUpgradeModal);
-const { isPro = false } = useProStatus(); // sourced from the `subscriptions` table, not local state
+  const { isPro } = useProStatus(); // sourced from the `subscriptions` table, not local state
   const displayName = profile?.displayName || session?.email?.split('@')[0] || 'Guest';
+
+  // Hidden from the nav for non-admins — the real access control is
+  // server-side (RLS on manual_payments, and review-manual-payment
+  // re-checking is_admin itself), so this is a UX convenience, not the
+  // security boundary.
+  const navItems = profile?.isAdmin ? [...NAV_ITEMS, { id: 'admin', label: 'Admin', icon: ShieldCheck }] : NAV_ITEMS;
 
   const handleClick = (item) => {
     if (item.pro && !isPro) {
@@ -43,13 +45,12 @@ const { isPro = false } = useProStatus(); // sourced from the `subscriptions` ta
         </div>
 
         <nav className="flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = activeView === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => handleClick(item)}
-                aria-current={active ? 'page' : undefined}
                 className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left
                   ${active ? 'text-slate-50' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
               >
