@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Gem, AlertCircle, RefreshCw } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import { useStore } from './store/useStore';
-import { refreshUntilPro, useProStatus } from './hooks/useProStatus';
+import { useProStatus } from './hooks/useProStatus';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
 import Sidebar from './components/Sidebar';
@@ -11,7 +11,6 @@ import TopBar from './components/TopBar';
 import MobileNav from './components/MobileNav';
 import TransactionModal from './components/TransactionModal';
 import UpgradeModal from './components/UpgradeModal';
-import InstallPrompt from './components/InstallPrompt';
 import DashboardSkeleton from './components/skeletons/DashboardSkeleton';
 import TransactionListSkeleton from './components/skeletons/TransactionListSkeleton';
 
@@ -26,22 +25,17 @@ import TransactionListSkeleton from './components/skeletons/TransactionListSkele
 // across the whole app) and are small, so splitting them would only add
 // a Suspense-fallback flicker on a frequent interaction for no real
 // bundle-size win.
-//
-// AuthScreen and ResetPasswordScreen are also NOT lazy on purpose: they
-// are the first thing a logged-out visitor sees, so a Suspense fallback
-// there would mean a second spinner right after the auth spinner.
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const TransactionList = lazy(() => import('./components/TransactionList'));
 const BudgetProgress = lazy(() => import('./components/BudgetProgress'));
 const RecurringManager = lazy(() => import('./components/RecurringManager'));
 const ExportPanel = lazy(() => import('./components/ExportPanel'));
 const BillingPanel = lazy(() => import('./components/BillingPanel'));
-const GoalManager = lazy(() => import('./components/GoalManager'));
-const DebtManager = lazy(() => import('./components/DebtManager'));
+const AdminPaymentsPanel = lazy(() => import('./components/AdminPaymentsPanel'));
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center" role="status" aria-live="polite">
+    <div className="min-h-screen flex items-center justify-center">
       <motion.div
         animate={{ opacity: [0.4, 1, 0.4] }}
         transition={{ repeat: Infinity, duration: 1.4 }}
@@ -49,7 +43,6 @@ function LoadingScreen() {
       >
         <Gem size={18} className="text-obsidian-950" />
       </motion.div>
-      <span className="sr-only">Checking your session…</span>
     </div>
   );
 }
@@ -79,28 +72,27 @@ const VIEWS = {
   dashboard: Dashboard,
   transactions: () => <TransactionList />,
   budgets: BudgetProgress,
-  goals: GoalManager,
-  debts: DebtManager,
   recurring: RecurringManager,
   export: ExportPanel,
   billing: BillingPanel,
+  // Not access-controlled here — a non-admin manually forcing activeView
+  // to 'admin' would just see an empty list, since RLS ("Admins can view
+  // all manual payments") only returns other users' rows to profiles
+  // with is_admin = true, and review-manual-payment independently
+  // re-checks is_admin server-side before approving anything. The
+  // Sidebar nav item is hidden from non-admins for UX, not security.
+  admin: AdminPaymentsPanel,
 };
-
-// Views the user can only reach on the Pro plan. Kept here rather than
-// only in the nav components because nav is not a security boundary: a
-// stale `activeView` (say, a Pro user whose subscription lapses while the
-// tab is open) would otherwise keep rendering a paid panel indefinitely.
-const PRO_VIEWS = ['budgets', 'goals', 'debts', 'recurring', 'export'];
 
 export default function App() {
   const session = useStore((s) => s.session);
   const authLoading = useStore((s) => s.authLoading);
-  const recoveryMode = useStore((s) => s.recoveryMode);
+  const isPasswordRecovery = useStore((s) => s.isPasswordRecovery);
   const dataLoading = useStore((s) => s.dataLoading);
   const dataError = useStore((s) => s.dataError);
   const initAuth = useStore((s) => s.initAuth);
   const initData = useStore((s) => s.initData);
-  const { isPro, loading: proLoading } = useProStatus();
+  const { refresh: refreshProStatus } = useProStatus();
 
   const [activeView, setActiveView] = useState('dashboard');
 
@@ -108,80 +100,33 @@ export default function App() {
     initAuth();
   }, [initAuth]);
 
-  // ---- Stripe return flow -------------------------------------------
-  //
-  // The Payment Link is configured (in the Stripe Dashboard, not in
-  // code — see README) to redirect back to /dashboard?success=true once
-  // payment completes. Two things have to be true for Pro to unlock
-  // without a manual refresh:
-  //
-  //  1. vercel.json rewrites /(.*) to /index.html, so the /dashboard
-  //     path loads this SPA rather than 404ing. (Already in place.)
-  //  2. The `subscriptions` row has to actually exist by the time we
-  //     read it — and it's written by the Stripe *webhook*, which is a
-  //     separate request racing this redirect. A single refetch fired
-  //     the instant the page loads will often lose that race and leave
-  //     the user staring at a locked Pro UI after paying.
-  //
-  // So instead of one refetch, poll with a short backoff until the row
-  // shows an active status (or we give up and let the Realtime
-  // subscription in useProStatus deliver it whenever it lands).
+  // The Stripe Payment Link is configured (in the Stripe Dashboard, not
+  // in code — see README) to redirect back here with `?success=true`
+  // once payment completes. The webhook usually lands within a second or
+  // two of that redirect, and useProStatus()'s Realtime subscription
+  // will pick it up on its own — but we also force one explicit refetch
+  // right here so the "Welcome to Pro" toast and unlocked UI show up
+  // immediately instead of waiting on Realtime's round trip.
   useEffect(() => {
-    if (!session) return;
-
     const params = new URLSearchParams(window.location.search);
-    const paid = params.get('success') === 'true';
-    const canceled = params.get('canceled') === 'true';
-    if (!paid && !canceled) return;
-
-    // Strip the flag immediately so a refresh (or this effect re-running
-    // on any later session change) can't replay the toast.
-    window.history.replaceState({}, '', window.location.pathname);
-
-    if (canceled) {
-      toast('Checkout canceled — no charge was made.', { icon: '👋' });
-      return;
+    if (params.get('success') === 'true' && session) {
+      refreshProStatus().then(() => toast.success('Payment received — welcome to Pro!'));
+      params.delete('success');
+      window.history.replaceState({}, '', window.location.pathname);
     }
+  }, [session, refreshProStatus]);
 
-    let cancelled = false;
-    const toastId = toast.loading('Confirming your payment…');
-
-    (async () => {
-      const unlocked = await refreshUntilPro();
-      if (cancelled) return;
-      toast.dismiss(toastId);
-      if (unlocked) {
-        toast.success('Payment received — welcome to Pro!');
-      } else {
-        // Stripe took the money but the webhook hasn't landed yet.
-        // useProStatus' Realtime channel will flip the UI the moment it
-        // does, so this is informational, not an error.
-        toast('Payment received. Pro will unlock in a moment.', { icon: '⏳', duration: 6000 });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      toast.dismiss(toastId);
-    };
-  }, [session]);
-
-  // ---- Redirect logic ------------------------------------------------
-  // Order matters. Recovery is checked BEFORE the session check because
-  // a password-reset link signs the user in with a short-lived recovery
-  // session — without this branch they'd be dropped straight onto the
-  // dashboard with no way to actually set a new password.
   if (authLoading) return <LoadingScreen />;
-  if (recoveryMode) return <ResetPasswordScreen />;
+  // Checked BEFORE the normal `!session` gate: a password-recovery link
+  // click gives the user a real session (see the comment on
+  // isPasswordRecovery in useStore.js), so without this check they'd
+  // skip straight to the Dashboard instead of being asked to actually
+  // set a new password.
+  if (isPasswordRecovery) return <ResetPasswordScreen />;
   if (!session) return <AuthScreen />;
   if (dataError) return <DataErrorScreen message={dataError} onRetry={initData} />;
 
-  // Fall back to the dashboard if the current view is Pro-gated and the
-  // user isn't (or no longer is) Pro. `proLoading` is checked so the
-  // first render — before the subscription row has come back — doesn't
-  // bounce a genuine Pro user off the page they just opened.
-  const effectiveView = !proLoading && PRO_VIEWS.includes(activeView) && !isPro ? 'dashboard' : activeView;
-  const ActiveComponent = VIEWS[effectiveView];
+  const ActiveComponent = VIEWS[activeView];
 
   return (
     <div className="min-h-screen flex">
@@ -191,34 +136,33 @@ export default function App() {
           style: { background: '#13141B', color: '#E2E8F0', border: '1px solid rgba(255,255,255,0.08)' },
         }}
       />
-      <Sidebar activeView={effectiveView} onNavigate={setActiveView} />
+      <Sidebar activeView={activeView} onNavigate={setActiveView} />
 
-      <main className="flex-1 p-5 md:p-8 pb-28 md:pb-8 max-w-6xl mx-auto w-full">
-        <TopBar activeView={effectiveView} />
+      <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-6xl mx-auto w-full">
+        <TopBar activeView={activeView} />
 
         {dataLoading ? (
-          effectiveView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />
+          activeView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />
         ) : (
-          <Suspense fallback={effectiveView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />}>
+          <Suspense fallback={activeView === 'dashboard' ? <DashboardSkeleton /> : <TransactionListSkeleton />}>
             <AnimatePresence mode="wait">
               <motion.div
-                key={effectiveView}
+                key={activeView}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.25 }}
               >
-                <ActiveComponent onNavigate={setActiveView} />
+                <ActiveComponent />
               </motion.div>
             </AnimatePresence>
           </Suspense>
         )}
       </main>
 
-      <MobileNav activeView={effectiveView} onNavigate={setActiveView} />
+      <MobileNav activeView={activeView} onNavigate={setActiveView} />
       <TransactionModal />
       <UpgradeModal />
-      <InstallPrompt />
     </div>
   );
 }
