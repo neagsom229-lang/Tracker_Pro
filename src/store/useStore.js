@@ -11,20 +11,42 @@ import { addInterval, todayISO } from '../utils/recurrence';
  * 1. TransactionModal calls `addTransaction(payload)`.
  * 2. The store immediately builds an optimistic transaction (temp id) and
  *    prepends it to state — the UI updates instantly, before the network
- *    request even resolves.
+ *    request even resolves. This is what makes the app feel instant
+ *    despite now talking to a real database over the network.
  * 3. `dataProvider.addTransaction` sends the insert to Supabase. RLS on
- *    the `transactions` table guarantees this can only write a row owned
- *    by the caller.
- * 4. On success, the optimistic row is swapped for the real row.
- * 5. On failure, the optimistic row is rolled back and a toast explains why.
+ *    the `transactions` table (see supabase/migrations) guarantees this
+ *    can only ever write a row owned by the caller.
+ * 4. On success, the optimistic row is swapped for the real row (real id,
+ *    real created_at) returned by Postgres.
+ * 5. On failure, the optimistic row is rolled back and a toast explains
+ *    what went wrong — the UI never silently "loses" or fakes data.
  */
 
+// Module-level (not store state) on purpose: guards the very first data
+// load against running twice. On an already-logged-in page load,
+// `getSession()` resolving AND `onAuthStateChange` firing its initial
+// event (Supabase v2 calls the listener once immediately on subscribe,
+// with whatever session already exists, in addition to the separate
+// getSession() promise below) can both observe "no session yet → now
+// there's one" and each call initData() — two redundant parallel
+// fetches of the same data. This flag makes only the first of the two
+// actually trigger a fetch; every subsequent real sign-in (after an
+// explicit sign-out) still works normally since `initAuth` isn't
+// re-run per sign-in — `hasInitializedData` only needs to guard this
+// one startup race, not every future auth transition.
 let hasInitializedData = false;
 
 export const useStore = create((set, get) => ({
   // ---------------- Auth ----------------
-  session: null,
+  session: null, // Supabase `user` object once signed in, else null
   authLoading: true,
+  // True for the window between the user clicking a "reset your
+  // password" email link and them actually setting a new password.
+  // Supabase treats that click as a real sign-in (it sets a genuine
+  // session so `updateUser({ password })` has something to act on), so
+  // without this flag the normal `session` check in App.jsx would drop
+  // the user straight into the Dashboard on a temporary recovery
+  // session, instead of prompting them to actually set a new password.
   isPasswordRecovery: false,
   clearPasswordRecovery: () => set({ isPasswordRecovery: false }),
 
@@ -35,11 +57,16 @@ export const useStore = create((set, get) => ({
       get().initData();
     };
 
+    // 1. Check for an existing session on first load (e.g. page refresh).
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session: session?.user ?? null, authLoading: false });
       if (session?.user) initDataOnce();
     });
 
+    // 2. Subscribe to ALL future auth changes: login, logout, token
+    // refresh, the redirect-back from Google OAuth, and password
+    // recovery. This one listener is what makes AuthScreen's Supabase
+    // calls "just work" without it needing to touch the store directly.
     supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') set({ isPasswordRecovery: true });
 
@@ -48,16 +75,10 @@ export const useStore = create((set, get) => ({
       set({ session: user, authLoading: false });
       if (user && wasLoggedOut) initDataOnce();
       if (!user) {
+        // A real sign-out: reset the guard so a fresh sign-in (by the
+        // same or a different user, in the same tab) fetches again.
         hasInitializedData = false;
-        set({
-          transactions: [],
-          budgets: {},
-          recurring: [],
-          goals: [],
-          debts: [],
-          profile: null,
-          notifications: [],
-        });
+        set({ transactions: [], budgets: {}, recurring: [], profile: null, bankConnections: [], notifications: [] });
       }
     });
   },
@@ -68,11 +89,10 @@ export const useStore = create((set, get) => ({
 
   // ---------------- Core data ----------------
   transactions: [],
-  budgets: {},
-  recurring: [],
-  goals: [],
-  debts: [],
-  profile: null,
+  budgets: {}, // { [categoryId]: monthlyLimitUSD }
+  recurring: [], // [{ id, description, amount, category, frequency, nextRunDate }]
+  profile: null, // { currency, displayName } — account settings only, not billing
+  bankConnections: [], // [{ id, institutionName, status, lastSyncedAt }] — never the access token itself
   dataLoading: true,
   dataError: null,
 
@@ -81,18 +101,19 @@ export const useStore = create((set, get) => ({
     if (!userId) return;
     set({ dataLoading: true, dataError: null });
     try {
-      const [transactions, budgets, recurring, profile, notifications, goals, debts] = await Promise.all([
+      const [transactions, budgets, recurring, profile, bankConnections, notifications] = await Promise.all([
         dataProvider.getTransactions(userId),
         dataProvider.getBudgets(userId),
         dataProvider.getRecurring(userId),
         dataProvider.getProfile(userId),
+        dataProvider.getBankConnections(userId),
         dataProvider.getNotifications(userId),
-        dataProvider.getGoals(userId),
-        dataProvider.getDebts(userId),
       ]);
-      set({ transactions, budgets, recurring, profile, notifications, goals, debts, dataLoading: false });
+      set({ transactions, budgets, recurring, profile, bankConnections, notifications, dataLoading: false });
       get().processRecurring();
     } catch (err) {
+      // Network failure or RLS/config issue — surface it instead of
+      // leaving the UI stuck on a blank loading screen forever.
       set({ dataLoading: false, dataError: err.message });
       toast.error(`Couldn't load your data: ${err.message}`);
     }
@@ -123,33 +144,36 @@ export const useStore = create((set, get) => ({
       set({ transactions: get().transactions.map((t) => (t.id === id ? saved : t)) });
       toast.success('Transaction updated.');
     } catch (err) {
-      set({ transactions: previous });
+      set({ transactions: previous }); // roll back to the exact pre-edit state
       toast.error(err.message);
     }
   },
 
   deleteTransaction: async (id) => {
-    const previous = get().transactions;
-    set({ transactions: previous.filter((t) => t.id !== id) });
+    // Capture the specific removed transaction, not just "the array
+    // before" — see the comment above addTransaction's tempId pattern.
+    // If this delete is in flight at the same moment something else
+    // legitimately changes `transactions` (a Realtime bank-sync insert
+    // landing, another tab adding a transaction, AI Quick Add
+    // resolving), restoring a stale full-array snapshot on failure
+    // would silently erase that OTHER, successful change too — the
+    // user would watch a transaction they just added vanish, for a
+    // reason completely unrelated to it. Removing/restoring only this
+    // one row composes safely with whatever else is happening.
+    const removed = get().transactions.find((t) => t.id === id);
+    set({ transactions: get().transactions.filter((t) => t.id !== id) });
     try {
       await dataProvider.deleteTransaction(id);
       toast.success('Transaction deleted.');
     } catch (err) {
-      set({ transactions: previous });
+      if (removed) {
+        // Re-insert and re-sort rather than assume position 0 — another
+        // transaction could have been added in the interim, and the
+        // list's invariant (newest first) should hold regardless.
+        set({ transactions: [...get().transactions, removed].sort((a, b) => (a.date < b.date ? 1 : -1)) });
+      }
       toast.error(err.message);
     }
-  },
-
-  // Used by AIQuickAdd: the Edge Function already inserted the row
-  // server-side, so this just splices the returned row into local
-  // state — no network call, no optimistic insert, nothing to roll
-  // back, and a duplicate-guard in case the same row arrives twice.
-  receiveExternalTransaction: (tx) => {
-    if (!tx?.id) return;
-    set((state) => {
-      if (state.transactions.some((t) => t.id === tx.id)) return state;
-      return { transactions: [tx, ...state.transactions] };
-    });
   },
 
   // ---------------- Budgets (Pro) ----------------
@@ -168,20 +192,25 @@ export const useStore = create((set, get) => ({
 
   removeBudget: async (categoryId) => {
     const userId = get().session.id;
-    const previous = get().budgets;
-    const updated = { ...previous };
+    const removedLimit = get().budgets[categoryId]; // capture just this key's value
+    const updated = { ...get().budgets };
     delete updated[categoryId];
     set({ budgets: updated });
     try {
       await dataProvider.removeBudget(userId, categoryId);
       toast.success('Budget removed.');
     } catch (err) {
-      set({ budgets: previous });
+      // Merge the one key back into whatever `budgets` looks like NOW,
+      // not a stale snapshot — same reasoning as deleteTransaction above:
+      // a concurrent setBudget() on a different category shouldn't be
+      // undone by this failure.
+      set({ budgets: { ...get().budgets, [categoryId]: removedLimit } });
       toast.error(err.message);
     }
   },
 
   // ---------------- Recurring transactions (Pro) ----------------
+  // frequency: 'weekly' | 'monthly' | 'yearly'
   addRecurring: async (payload) => {
     const userId = get().session.id;
     try {
@@ -194,17 +223,24 @@ export const useStore = create((set, get) => ({
   },
 
   removeRecurring: async (id) => {
-    const previous = get().recurring;
-    set({ recurring: previous.filter((r) => r.id !== id) });
+    const removed = get().recurring.find((r) => r.id === id);
+    set({ recurring: get().recurring.filter((r) => r.id !== id) });
     try {
       await dataProvider.removeRecurring(id);
       toast.success('Recurring rule removed.');
     } catch (err) {
-      set({ recurring: previous });
+      if (removed) set({ recurring: [...get().recurring, removed] });
       toast.error(err.message);
     }
   },
 
+  // The recurring "engine": on every app load, walk each rule forward
+  // from its stored `nextRunDate` until that date is in the future,
+  // creating one real transaction per period that has elapsed (capped so
+  // a rule nobody has opened the app for in years can't create thousands
+  // of rows at once). This runs client-side for the demo; in a stricter
+  // production setup you'd also run this on a daily cron via a Supabase
+  // scheduled Edge Function so it fires even if the user never opens the app.
   processRecurring: async () => {
     const { recurring, session } = get();
     if (!session) return;
@@ -221,6 +257,10 @@ export const useStore = create((set, get) => ({
 
       while (nextRun <= today && runsGenerated < MAX_CATCHUP_RUNS) {
         try {
+          // Insert directly (bypassing the optimistic addTransaction
+          // action) so catch-up runs don't spam a toast per transaction
+          // or create/discard temporary optimistic rows for something
+          // the user didn't just click a button for.
           const saved = await dataProvider.addTransaction(userId, {
             description: `${rule.description} (auto)`,
             amount: rule.amount,
@@ -254,121 +294,6 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // ---------------- Savings goals (Pro) ----------------
-  addGoal: async ({ name, targetAmount, deadline }) => {
-    const userId = get().session.id;
-    const tempId = `temp-${Date.now()}`;
-    const optimistic = {
-      id: tempId,
-      name,
-      targetAmount,
-      currentAmount: 0,
-      deadline: deadline ?? null,
-      createdAt: new Date().toISOString(),
-    };
-    set({ goals: [...get().goals, optimistic] });
-
-    try {
-      const saved = await dataProvider.addGoal(userId, { name, targetAmount, deadline });
-      set({ goals: get().goals.map((g) => (g.id === tempId ? saved : g)) });
-      toast.success('Goal created.');
-      return saved;
-    } catch (err) {
-      set({ goals: get().goals.filter((g) => g.id !== tempId) });
-      toast.error(err.message);
-      throw err;
-    }
-  },
-
-  removeGoal: async (id) => {
-    const previous = get().goals;
-    set({ goals: previous.filter((g) => g.id !== id) });
-    try {
-      await dataProvider.removeGoal(id);
-      toast.success('Goal removed.');
-    } catch (err) {
-      set({ goals: previous });
-      toast.error(err.message);
-    }
-  },
-
-  contributeToGoal: async (id, amount) => {
-    const previous = get().goals;
-    set({
-      goals: previous.map((g) =>
-        g.id === id ? { ...g, currentAmount: g.currentAmount + amount } : g
-      ),
-    });
-    try {
-      const saved = await dataProvider.contributeToGoal(id, amount);
-      set({ goals: get().goals.map((g) => (g.id === id ? saved : g)) });
-      toast.success('Contribution added.');
-      return saved;
-    } catch (err) {
-      set({ goals: previous });
-      toast.error(err.message);
-      throw err;
-    }
-  },
-
-  // ---------------- Debts (Pro) ----------------
-  addDebt: async ({ name, balance, interestRate, minimumPayment }) => {
-    const userId = get().session.id;
-    const tempId = `temp-${Date.now()}`;
-    const optimistic = {
-      id: tempId,
-      name,
-      initialBalance: balance,
-      balance,
-      interestRate,
-      minimumPayment,
-      createdAt: new Date().toISOString(),
-    };
-    set({ debts: [...get().debts, optimistic] });
-
-    try {
-      const saved = await dataProvider.addDebt(userId, { name, balance, interestRate, minimumPayment });
-      set({ debts: get().debts.map((d) => (d.id === tempId ? saved : d)) });
-      toast.success('Debt added.');
-      return saved;
-    } catch (err) {
-      set({ debts: get().debts.filter((d) => d.id !== tempId) });
-      toast.error(err.message);
-      throw err;
-    }
-  },
-
-  removeDebt: async (id) => {
-    const previous = get().debts;
-    set({ debts: previous.filter((d) => d.id !== id) });
-    try {
-      await dataProvider.removeDebt(id);
-      toast.success('Debt removed.');
-    } catch (err) {
-      set({ debts: previous });
-      toast.error(err.message);
-    }
-  },
-
-  logDebtPayment: async (id, amount) => {
-    const previous = get().debts;
-    set({
-      debts: previous.map((d) =>
-        d.id === id ? { ...d, balance: Math.max(d.balance - amount, 0) } : d
-      ),
-    });
-    try {
-      const saved = await dataProvider.logDebtPayment(id, amount);
-      set({ debts: get().debts.map((d) => (d.id === id ? saved : d)) });
-      toast.success('Payment logged.');
-      return saved;
-    } catch (err) {
-      set({ debts: previous });
-      toast.error(err.message);
-      throw err;
-    }
-  },
-
   // ---------------- Settings / billing ----------------
   setCurrency: async (currency) => {
     const userId = get().session.id;
@@ -382,6 +307,10 @@ export const useStore = create((set, get) => ({
     }
   },
 
+  // Re-fetches account settings (currency, display name) from Postgres.
+  // Note: this does NOT touch Pro status — that lives in the
+  // `subscriptions` table and is read via useProStatus(), which has its
+  // own refresh() for use after a Stripe redirect.
   refreshProfile: async () => {
     const userId = get().session?.id;
     if (!userId) return;
@@ -394,10 +323,16 @@ export const useStore = create((set, get) => ({
   },
 
   // ---------------- Notifications ----------------
+  // Initial list loaded once by initData(); useNotifications.js keeps it
+  // live afterward via a Realtime INSERT subscription that calls
+  // receiveNotification() as new rows land (e.g. from a budget-exceeded
+  // or recurring-due check running server-side).
   notifications: [],
 
   receiveNotification: (notification) =>
     set((state) => {
+      // Realtime can occasionally redeliver an event (e.g. a brief
+      // reconnect); de-dupe by id rather than trusting "exactly once."
       if (state.notifications.some((n) => n.id === notification.id)) return state;
       return { notifications: [notification, ...state.notifications] };
     }),
@@ -436,9 +371,17 @@ export const useStore = create((set, get) => ({
   closeTransactionModal: () => set({ isTransactionModalOpen: false, editingTransactionId: null }),
   openUpgradeModal: (reason = 'this feature') => set({ isUpgradeModalOpen: true, upgradeReason: reason }),
   closeUpgradeModal: () => set({ isUpgradeModalOpen: false }),
+
+  // Pro-gating now happens in components via the useProStatus() hook
+  // (e.g. Sidebar/MobileNav check `isPro` from that hook directly, then
+  // call `openUpgradeModal(reason)` above if the user isn't Pro) — the
+  // store no longer holds isPro itself, since `subscriptions` in
+  // Postgres (kept live via Realtime) is the single source of truth.
 }));
 
 // ---------------- Derived selectors ----------------
+// Plain functions, not stored state, so totals can never drift out of
+// sync with the transaction list.
 
 export const selectTotals = (transactions) => {
   const totalIncome = transactions.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
@@ -462,28 +405,3 @@ export const selectSpendingThisMonth = (transactions) => {
 };
 
 export const selectUnreadCount = (notifications) => notifications.filter((n) => !n.read).length;
-
-export const selectGoalTotals = (goals) => {
-  const totalTarget = goals.reduce((s, g) => s + (g.targetAmount || 0), 0);
-  const totalSaved = goals.reduce((s, g) => s + (g.currentAmount || 0), 0);
-  const completed = goals.filter((g) => g.currentAmount >= g.targetAmount).length;
-  return {
-    count: goals.length,
-    completed,
-    totalTarget,
-    totalSaved,
-    totalRemaining: Math.max(totalTarget - totalSaved, 0),
-  };
-};
-
-export const selectDebtTotals = (debts) => {
-  const totalBalance = debts.reduce((s, d) => s + (d.balance || 0), 0);
-  const totalInitial = debts.reduce((s, d) => s + (d.initialBalance || 0), 0);
-  const rawProgress = totalInitial > 0 ? (totalInitial - totalBalance) / totalInitial : 0;
-  return {
-    count: debts.length,
-    totalBalance,
-    totalInitial,
-    payoffProgress: Math.min(Math.max(rawProgress, 0), 1),
-  };
-};
