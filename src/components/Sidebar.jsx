@@ -3,7 +3,7 @@ import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Download, LogOut, Gem, C
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
   { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
   { id: 'budgets', label: 'Budgets', icon: PiggyBank, pro: true },

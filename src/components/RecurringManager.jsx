@@ -12,7 +12,16 @@ export default function RecurringManager() {
   const addRecurring = useStore((s) => s.addRecurring);
   const removeRecurring = useStore((s) => s.removeRecurring);
 
-  const [form, setForm] = useState({ description: '', amount: '', category: 'rent', direction: 'expense', frequency: 'monthly' });
+  // Defaults to 'food' — matching TransactionModal's convention and,
+  // importantly, matching the FIRST expense option actually shown in
+  // this form's own category dropdown. The previous default was
+  // 'rent', which is NOT the first visible option — meaning anyone who
+  // typed a description and amount without noticing the pre-selected
+  // category (e.g. typing "Netflix" and submitting) got a rule
+  // silently filed under Rent. Defaulting to whatever's already
+  // visually selected at the top of the list is what makes "I didn't
+  // touch the dropdown" a safe assumption instead of a trap.
+  const [form, setForm] = useState({ description: '', amount: '', category: 'food', direction: 'expense', frequency: 'monthly' });
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
@@ -28,7 +37,7 @@ export default function RecurringManager() {
       category: form.category,
       frequency: form.frequency,
     });
-    setForm({ description: '', amount: '', category: 'rent', direction: 'expense', frequency: 'monthly' });
+    setForm({ description: '', amount: '', category: 'food', direction: 'expense', frequency: 'monthly' });
   };
 
   return (

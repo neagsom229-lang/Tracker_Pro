@@ -11,6 +11,7 @@ import TopBar from './components/TopBar';
 import MobileNav from './components/MobileNav';
 import TransactionModal from './components/TransactionModal';
 import UpgradeModal from './components/UpgradeModal';
+import CommandPalette from './components/CommandPalette';
 import DashboardSkeleton from './components/skeletons/DashboardSkeleton';
 import TransactionListSkeleton from './components/skeletons/TransactionListSkeleton';
 
@@ -116,6 +117,15 @@ export default function App() {
     }
   }, [session, refreshProStatus]);
 
+  // CommandPalette dispatches this instead of taking setActiveView as a
+  // prop, to stay decoupled from activeView living as local state here
+  // rather than in the store (see the comment in CommandPalette.jsx).
+  useEffect(() => {
+    const handleNavigate = (e) => setActiveView(e.detail);
+    window.addEventListener('obsidian:navigate', handleNavigate);
+    return () => window.removeEventListener('obsidian:navigate', handleNavigate);
+  }, []);
+
   if (authLoading) return <LoadingScreen />;
   // Checked BEFORE the normal `!session` gate: a password-recovery link
   // click gives the user a real session (see the comment on
@@ -163,6 +173,7 @@ export default function App() {
       <MobileNav activeView={activeView} onNavigate={setActiveView} />
       <TransactionModal />
       <UpgradeModal />
+      <CommandPalette />
     </div>
   );
 }

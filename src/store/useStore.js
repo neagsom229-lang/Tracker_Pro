@@ -78,7 +78,7 @@ export const useStore = create((set, get) => ({
         // A real sign-out: reset the guard so a fresh sign-in (by the
         // same or a different user, in the same tab) fetches again.
         hasInitializedData = false;
-        set({ transactions: [], budgets: {}, recurring: [], profile: null, bankConnections: [], notifications: [] });
+        set({ transactions: [], budgets: {}, recurring: [], profile: null, notifications: [], parseCorrections: {}, assets: [], netWorthHistory: [] });
       }
     });
   },
@@ -92,7 +92,9 @@ export const useStore = create((set, get) => ({
   budgets: {}, // { [categoryId]: monthlyLimitUSD }
   recurring: [], // [{ id, description, amount, category, frequency, nextRunDate }]
   profile: null, // { currency, displayName } — account settings only, not billing
-  bankConnections: [], // [{ id, institutionName, status, lastSyncedAt }] — never the access token itself
+  parseCorrections: {}, // { [normalizedKeyword]: categoryId } — feeds parseQuickAddText()
+  assets: [], // [{ id, name, type: 'cash'|'investment'|'property'|'debt', value }]
+  netWorthHistory: [], // [{ date, totalAssets, totalDebts, netWorth }] — last 90 days, from net_worth_snapshots
   dataLoading: true,
   dataError: null,
 
@@ -101,15 +103,27 @@ export const useStore = create((set, get) => ({
     if (!userId) return;
     set({ dataLoading: true, dataError: null });
     try {
-      const [transactions, budgets, recurring, profile, bankConnections, notifications] = await Promise.all([
+      const [transactions, budgets, recurring, profile, notifications, parseCorrections, assets, netWorthHistory] = await Promise.all([
         dataProvider.getTransactions(userId),
         dataProvider.getBudgets(userId),
         dataProvider.getRecurring(userId),
         dataProvider.getProfile(userId),
-        dataProvider.getBankConnections(userId),
         dataProvider.getNotifications(userId),
+        dataProvider.getParseCorrections(userId),
+        dataProvider.getAssets(userId),
+        dataProvider.getNetWorthHistory(userId),
       ]);
-      set({ transactions, budgets, recurring, profile, bankConnections, notifications, dataLoading: false });
+      set({
+        transactions,
+        budgets,
+        recurring,
+        profile,
+        notifications,
+        parseCorrections,
+        assets,
+        netWorthHistory,
+        dataLoading: false,
+      });
       get().processRecurring();
     } catch (err) {
       // Network failure or RLS/config issue — surface it instead of
@@ -358,6 +372,68 @@ export const useStore = create((set, get) => ({
     } catch (err) {
       set({ notifications: previous });
       toast.error(err.message);
+    }
+  },
+
+  // Learns a per-user category correction for future Quick Add parses.
+  // Fire-and-forget from the UI's perspective (see AIQuickAdd.jsx) —
+  // it's a nice-to-have that shouldn't block or fail the actual
+  // transaction being added, so this deliberately doesn't roll back
+  // parseCorrections on failure the way money-affecting actions do;
+  // worst case, the app just asks the same question again next time.
+  saveParseCorrection: async (patternKey, category) => {
+    const userId = get().session?.id;
+    if (!userId || !patternKey) return;
+    set({ parseCorrections: { ...get().parseCorrections, [patternKey]: category } });
+    try {
+      await dataProvider.saveParseCorrection(userId, patternKey, category);
+    } catch (err) {
+      console.error('Failed to save parse correction:', err.message); // non-critical, no toast
+    }
+  },
+
+  // ---------------- Net worth (assets & debts) ----------------
+  addAsset: async (payload) => {
+    const userId = get().session.id;
+    try {
+      const asset = await dataProvider.addAsset(userId, payload);
+      set({ assets: [...get().assets, asset] });
+      toast.success(`${asset.name} added.`);
+      // The DB trigger (recompute_net_worth_snapshot) already updated
+      // today's snapshot server-side the moment the insert committed —
+      // this just re-fetches so the trend chart reflects it without a
+      // full page reload.
+      get().refreshNetWorthHistory();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  },
+
+  removeAsset: async (id) => {
+    // Surgical rollback (capture just this one item), not a full-array
+    // snapshot — same reasoning as deleteTransaction elsewhere in this
+    // file: a stale snapshot restore on failure would also undo any
+    // OTHER concurrent change to `assets`.
+    const removed = get().assets.find((a) => a.id === id);
+    set({ assets: get().assets.filter((a) => a.id !== id) });
+    try {
+      await dataProvider.removeAsset(id);
+      toast.success('Removed.');
+      get().refreshNetWorthHistory();
+    } catch (err) {
+      if (removed) set({ assets: [...get().assets, removed] });
+      toast.error(err.message);
+    }
+  },
+
+  refreshNetWorthHistory: async () => {
+    const userId = get().session?.id;
+    if (!userId) return;
+    try {
+      const netWorthHistory = await dataProvider.getNetWorthHistory(userId);
+      set({ netWorthHistory });
+    } catch (err) {
+      console.error('Failed to refresh net worth history:', err.message); // non-critical for the primary action, no toast
     }
   },
 

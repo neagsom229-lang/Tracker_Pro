@@ -1,252 +1,247 @@
-import { useState, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wand2, Loader2, Check, X, Sparkles } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { Wand2, Loader2, Check, X } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
-import { getCategory } from '../utils/constants';
-import { formatMoney, formatDate } from '../utils/format';
+import { useProStatus } from '../hooks/useProStatus';
+import { parseTransactionText } from '../lib/ai';
+import { parseQuickAddText } from '../utils/parseQuickAdd';
+import { CATEGORIES, getCategory } from '../utils/constants';
 
 /**
- * AIQuickAdd
- * ----------
- * Type "Spent $15 on lunch today" → a transaction appears.
+ * Natural-language Quick Add: type a sentence, get an editable preview,
+ * confirm to add. Two-pass parsing:
  *
- * Two things worth knowing before you change this:
+ *  1. LOCAL (parseQuickAddText, synchronous, free, no network) runs on
+ *     submit and produces a preview almost instantly — this is what
+ *     makes the <100ms perceived-response budget trivially achievable
+ *     for the common case.
+ *  2. AI FALLBACK (the existing parse-transaction Edge Function) only
+ *     runs when the local pass has low confidence (missing amount, or
+ *     no category keyword matched anything). This is a real network
+ *     call with real latency — "perceived response" for THIS path
+ *     means the preview card appears immediately in a loading state
+ *     (so the UI acknowledges the input within the same budget). It
+ *     would be dishonest to also claim the AI call itself resolves in
+ *     under 100ms; it doesn't, and no local rewrite of this component
+ *     can make a third-party network round trip do that.
  *
- * 1. THE ROW IS ALREADY SAVED BY THE TIME THE REVIEW CARD APPEARS. The
- *    parse-transaction Edge Function inserts the transaction itself and
- *    returns it — "Keep it" just clears the review UI, and "Discard"
- *    issues a real delete. This trades the safety of a client-side
- *    confirm-before-write for a simpler function contract; it means a
- *    parse the user never revisits (they navigate away mid-review)
- *    leaves a real row behind rather than nothing. If that turns out to
- *    matter in practice, moving confirmation back to the client — parse
- *    returns a draft, a separate endpoint or store action inserts it —
- *    is the fix.
- *
- * 2. NO API KEY LIVES HERE. This component only ever calls our own
- *    Supabase Edge Function, authenticated with the user's own access
- *    token. The OpenAI key exists only as a Supabase secret, readable
- *    by the function's Deno process and nothing else. See
- *    supabase/functions/parse-transaction/index.ts.
+ * GATING CHANGE from the previous version of this component, worth
+ * calling out explicitly rather than leaving implicit: the whole
+ * component used to be Pro-only, because every submission was an
+ * OpenAI call. Now that local parsing handles the common case for
+ * free, gating the ENTIRE feature behind Pro no longer matches its
+ * actual cost shape. New behavior: local-only parsing (confidence
+ * 'high', or a free user manually fixing a 'low'-confidence guess in
+ * the preview) works for everyone; the AI fallback call specifically
+ * is what's Pro-gated. A free user who types something ambiguous still
+ * gets a preview card — just with the raw local guess (e.g. category
+ * defaulting to "other") instead of an AI-enhanced one — and can
+ * correct it inline before confirming, same as a Pro user always could.
  */
-
-// The user's LOCAL calendar date, not UTC. `new Date().toISOString()`
-// would tell the model it's already tomorrow for anyone east of UTC —
-// which in Phnom Penh (UTC+7) means every evening entry lands on the
-// wrong day.
-function localTodayISO() {
-  const now = new Date();
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-}
-
-const EXAMPLES = ['Spent $15 on lunch today', 'Grab to work 3.50', 'Got paid 1200 salary yesterday'];
-
 export default function AIQuickAdd() {
-  // The Edge Function now inserts the row itself and returns it, so this
-  // component only needs to splice the confirmed result into local
-  // state -- calling the store's addTransaction() here would insert a
-  // second, duplicate row.
-  const receiveExternalTransaction = useStore((s) => s.receiveExternalTransaction);
-  const currency = useStore((s) => s.profile?.currency || 'USD');
+  const { isPro } = useProStatus();
+  const addTransaction = useStore((s) => s.addTransaction);
+  const parseCorrections = useStore((s) => s.parseCorrections);
+  const saveParseCorrection = useStore((s) => s.saveParseCorrection);
 
   const [text, setText] = useState('');
-  const [parsing, setParsing] = useState(false);
-  const [discarding, setDiscarding] = useState(false);
-  const [draft, setDraft] = useState(null); // parsed result awaiting confirmation
-  const [error, setError] = useState('');
-  const inputRef = useRef(null);
+  const [preview, setPreview] = useState(null); // { description, amount, date, category, direction, matchedKeyword }
+  const [aiLoading, setAiLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleParse = async () => {
-    const input = text.trim();
-    if (!input || parsing) return;
+  const visibleCategories = useMemo(
+    () => CATEGORIES.filter((c) => c.type === (preview?.direction || 'expense')),
+    [preview?.direction]
+  );
 
-    setParsing(true);
-    setError('');
-    setDraft(null);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!text.trim() || preview) return;
 
+    const local = parseQuickAddText(text.trim(), parseCorrections);
+
+    if (local.confidence === 'high' || !isPro) {
+      // High confidence never needs AI. Low confidence for a free user
+      // also skips AI (that's the Pro-gated part) — they get the raw
+      // local guess and fix it inline instead.
+      setPreview(local);
+      return;
+    }
+
+    // Low confidence + Pro: show the local guess immediately (this is
+    // the "preview appears within budget" part), then enhance it with
+    // the AI result once it resolves.
+    setPreview(local);
+    setAiLoading(true);
     try {
-      // A fresh token, not a cached one: if the user has had the tab
-      // open for an hour the old access_token is expired and the
-      // function would reject it as unauthenticated.
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Your session expired — please sign in again.');
+      const aiResult = await parseTransactionText(text.trim());
+      const isIncome = getCategory(aiResult.category).type === 'income';
+      setPreview({
+        description: aiResult.description,
+        amount: aiResult.amount,
+        date: aiResult.date,
+        category: aiResult.category,
+        direction: isIncome ? 'income' : 'expense',
+        matchedKeyword: local.matchedKeyword, // keep the local guess's keyword for correction-learning purposes
+      });
+    } catch (err) {
+      toast.error(`Couldn't improve that guess: ${err.message} — you can still edit it below.`);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-transaction`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ text: input, today: localTodayISO() }),
+  const handleConfirm = async () => {
+    if (!preview.amount || preview.amount <= 0) return toast.error('Enter an amount greater than zero.');
+    setSubmitting(true);
+    try {
+      await addTransaction({
+        description: preview.description,
+        amount: preview.direction === 'income' ? preview.amount : -preview.amount,
+        category: preview.category,
+        date: preview.date,
       });
 
-      const body = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(body.error || "Couldn't read that. Try including an amount, e.g. \u201cSpent $15 on lunch\u201d.");
+      // Learn from this submission: if we have a keyword to hang the
+      // correction on (either the one the local parser matched, or a
+      // fallback derived from the description) and the user's final
+      // category differs from a plain re-parse of the same text, save
+      // it — next time this keyword appears, it'll resolve correctly
+      // and with high confidence on the FIRST (local, free) pass.
+      const fallbackKeyword = preview.description.toLowerCase().split(/\s+/).find((w) => w.length > 2 && !/^\d+$/.test(w));
+      const keyword = preview.matchedKeyword || fallbackKeyword;
+      const reparsed = parseQuickAddText(text.trim(), parseCorrections);
+      if (keyword && reparsed.category !== preview.category) {
+        saveParseCorrection(keyword, preview.category);
       }
 
-      setDraft(body); // { transaction, usage, mocked }
+      setText('');
+      setPreview(null);
     } catch (err) {
-      setError(err.message);
+      toast.error(err.message);
     } finally {
-      setParsing(false);
+      setSubmitting(false);
     }
   };
 
-  const handleConfirm = () => {
-    if (!draft) return;
-    // The row is already in Postgres (the function inserted it during
-    // Parse) -- this just makes the UI catch up. No network call, no
-    // chance of a duplicate insert.
-    receiveExternalTransaction(draft.transaction);
-    setDraft(null);
-    setText('');
-    inputRef.current?.focus();
+  const handleCancel = () => {
+    setPreview(null);
+    setAiLoading(false);
   };
-
-  const removeTransaction = useStore((s) => s.deleteTransaction);
-
-  const handleDiscard = async () => {
-    // The row already exists in Postgres by this point (Parse inserted
-    // it), so "Discard" has to actually delete it -- otherwise it stays
-    // in the ledger even though the UI shows nothing was added.
-    if (!draft) return;
-    setDiscarding(true);
-    await removeTransaction(draft.transaction.id);
-    setDiscarding(false);
-    setDraft(null);
-    inputRef.current?.focus();
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      if (draft) handleConfirm();
-      else handleParse();
-    }
-    if (e.key === 'Escape' && draft) handleDiscard();
-  };
-
-  const category = draft ? getCategory(draft.transaction.category) : null;
-  const signedAmount = draft ? draft.transaction.amount : 0;
 
   return (
-    <div className="glass rounded-2xl p-4 sm:p-5 shadow-glass">
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles size={14} className="text-gilt-gold" />
-        <h3 className="text-slate-100 font-medium text-sm">Quick Add</h3>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500 border border-white/8 rounded-full px-2 py-0.5">
-          AI
-        </span>
-      </div>
-
-      {/* Stacks on narrow screens so the input never gets squeezed to an
-          unusable width on a 375px device. */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            if (draft) setDraft(null);
-            if (error) setError('');
-          }}
-          onKeyDown={handleKeyDown}
-          disabled={parsing}
-          placeholder="Spent $15 on lunch today…"
-          aria-label="Describe a transaction in plain language"
-          className="flex-1 min-w-0 bg-obsidian-800/60 border border-white/8 rounded-xl px-3.5 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition disabled:opacity-60"
-        />
-        <button
-          onClick={handleParse}
-          disabled={parsing || !text.trim()}
-          className="gilt-btn rounded-xl px-4 py-2.5 text-sm flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
-        >
-          {parsing ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
-          {parsing ? 'Reading…' : 'Parse'}
-        </button>
-      </div>
-
-      <div aria-live="polite">
+    <div className="glass rounded-2xl shadow-glass overflow-hidden">
+      {!preview ? (
+        <form onSubmit={handleSubmit} className="p-3 pl-4 flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-gilt-gradient flex items-center justify-center shrink-0">
+            <Wand2 size={15} className="text-obsidian-950" />
+          </div>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder='Try "coffee 4.50 at Brown yesterday"…'
+            className="flex-1 bg-transparent text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!text.trim()}
+            className="gilt-btn rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+          >
+            Parse
+          </button>
+        </form>
+      ) : (
         <AnimatePresence mode="wait">
-          {error && (
-            <motion.p
-              key="error"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="text-xs text-expense mt-2.5"
-            >
-              {error}
-            </motion.p>
-          )}
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="p-4">
+            {aiLoading && (
+              <p className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+                <Loader2 size={11} className="animate-spin" /> Improving this guess…
+              </p>
+            )}
 
-          {draft && (
-            <motion.div
-              key="draft"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="mt-3 rounded-xl border border-gilt-gold/25 bg-gilt-gold/5 p-3"
-            >
-              <p className="text-[11px] text-slate-400 mb-2">Saved -- check it looks right, or discard it:</p>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: category.color }}
-                  aria-hidden="true"
+            <div className="grid grid-cols-2 gap-2.5 mb-3">
+              <div className="col-span-2">
+                <label className="text-[11px] text-slate-500 mb-1 block">Description</label>
+                <input
+                  value={preview.description}
+                  onChange={(e) => setPreview((p) => ({ ...p, description: e.target.value }))}
+                  className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
                 />
-                <span className="text-sm text-slate-100 font-medium truncate max-w-[40%]">{draft.transaction.description}</span>
-                <span className="text-xs text-slate-400">{category.label}</span>
-                <span className="text-xs text-slate-500">{formatDate(draft.transaction.date)}</span>
-                <span
-                  className={`text-sm font-semibold ml-auto ${signedAmount >= 0 ? 'text-income' : 'text-expense'}`}
-                >
-                  {formatMoney(signedAmount, currency)}
-                </span>
               </div>
+              <div>
+                <label className="text-[11px] text-slate-500 mb-1 block">Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={preview.amount ?? ''}
+                  onChange={(e) => setPreview((p) => ({ ...p, amount: parseFloat(e.target.value) || null }))}
+                  className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500 mb-1 block">Date</label>
+                <input
+                  type="date"
+                  value={preview.date}
+                  onChange={(e) => setPreview((p) => ({ ...p, date: e.target.value }))}
+                  className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500 mb-1 block">Type</label>
+                <div className="flex rounded-lg overflow-hidden border border-white/8">
+                  {['expense', 'income'].map((dir) => (
+                    <button
+                      key={dir}
+                      type="button"
+                      onClick={() =>
+                        setPreview((p) => ({ ...p, direction: dir, category: CATEGORIES.find((c) => c.type === dir).id }))
+                      }
+                      className={`flex-1 py-2 text-xs capitalize ${
+                        preview.direction === dir ? 'bg-white/10 text-slate-100' : 'text-slate-500'
+                      }`}
+                    >
+                      {dir}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-500 mb-1 block">Category</label>
+                <select
+                  value={preview.category}
+                  onChange={(e) => setPreview((p) => ({ ...p, category: e.target.value }))}
+                  className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+                >
+                  {visibleCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={handleConfirm}
-                  className="gilt-btn rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5"
-                >
-                  <Check size={13} /> Keep it
-                </button>
-                <button
-                  onClick={handleDiscard}
-                  disabled={discarding}
-                  className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-white/8 flex items-center gap-1.5 disabled:opacity-60"
-                >
-                  <X size={13} /> {discarding ? 'Removing…' : 'Discard'}
-                </button>
-              </div>
-            </motion.div>
-          )}
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirm}
+                disabled={submitting || aiLoading}
+                className="flex-1 gilt-btn rounded-lg py-2 text-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
+              >
+                <Check size={14} /> {submitting ? 'Adding…' : 'Confirm'}
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={submitting}
+                className="rounded-lg px-3 py-2 text-sm border border-white/10 text-slate-400 hover:text-slate-200 flex items-center gap-1.5"
+              >
+                <X size={14} /> Cancel
+              </button>
+            </div>
+          </motion.div>
         </AnimatePresence>
-      </div>
-
-      {!draft && !error && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {EXAMPLES.map((example) => (
-            <button
-              key={example}
-              onClick={() => {
-                setText(example);
-                inputRef.current?.focus();
-              }}
-              className="text-[11px] text-slate-500 hover:text-slate-300 border border-white/8 rounded-full px-2.5 py-1 transition-colors"
-            >
-              {example}
-            </button>
-          ))}
-        </div>
       )}
     </div>
   );

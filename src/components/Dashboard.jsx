@@ -6,6 +6,8 @@ import CategoryChart from './CategoryChart';
 import TrendChart from './TrendChart';
 import TransactionList from './TransactionList';
 import AIQuickAdd from './AIQuickAdd';
+import BudgetHealthCard from './BudgetHealthCard';
+import NetWorth from './NetWorth';
 
 export default function Dashboard() {
   const transactions = useStore((s) => s.transactions);
@@ -17,14 +19,8 @@ export default function Dashboard() {
   // component happens to go through for an unrelated reason, e.g. the
   // user switching currency, which changes `currency` but not the
   // underlying totals.
-  const { totalBalance, totalIncome, totalExpenses } = useMemo(
-    () => selectTotals(transactions ?? []),
-    [transactions]
-  );
-  const spendingThisMonth = useMemo(
-    () => selectSpendingThisMonth(transactions ?? []),
-    [transactions]
-  );
+  const { totalBalance, totalIncome, totalExpenses } = useMemo(() => selectTotals(transactions), [transactions]);
+  const spendingThisMonth = useMemo(() => selectSpendingThisMonth(transactions), [transactions]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,10 +32,15 @@ export default function Dashboard() {
         <StatCard label="Total Expenses" value={totalExpenses} currency={currency} icon={TrendingDown} tone="expense" delay={0.1} />
       </div>
 
+      <div className="flex flex-col md:flex-row gap-6">
+        <BudgetHealthCard />
+        <NetWorth />
+      </div>
+
       <div className="glass rounded-2xl p-5 shadow-glass">
         <h3 className="text-slate-100 font-medium mb-2">Balance Trend</h3>
         <p className="text-xs text-slate-500 mb-1">Last 30 days</p>
-        <TrendChart transactions={transactions ?? []} />
+        <TrendChart />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

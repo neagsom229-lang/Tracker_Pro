@@ -207,26 +207,6 @@ export const dataProvider = {
     assertNoError(error, 'saving your currency preference');
   },
 
-  // ---------------- Bank connections ----------------
-  // Deliberately does NOT select access_token_secret_id — the app never
-  // needs it (only the sync-bank-transactions Edge Function, running as
-  // service role, does), so there's no reason for it to ever leave the
-  // database in a response to the browser.
-  async getBankConnections(userId) {
-    const { data, error } = await supabase
-      .from('bank_connections')
-      .select('id, institution_name, status, last_synced_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    assertNoError(error, 'loading connected banks');
-    return data.map((c) => ({
-      id: c.id,
-      institutionName: c.institution_name,
-      status: c.status,
-      lastSyncedAt: c.last_synced_at,
-    }));
-  },
-
   // ---------------- Notifications ----------------
   async getNotifications(userId) {
     const { data, error } = await supabase
@@ -254,5 +234,71 @@ export const dataProvider = {
   async markAllNotificationsRead(userId) {
     const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
     assertNoError(error, 'updating your notifications');
+  },
+
+  // ---------------- Quick Add parse corrections ----------------
+  async getParseCorrections(userId) {
+    const { data, error } = await supabase.from('parse_corrections').select('pattern_key, corrected_category').eq('user_id', userId);
+    assertNoError(error, 'loading your Quick Add corrections');
+    return Object.fromEntries(data.map((c) => [c.pattern_key, c.corrected_category]));
+  },
+
+  async saveParseCorrection(userId, patternKey, correctedCategory) {
+    // Upsert on (user_id, pattern_key) — matches the unique constraint
+    // in the migration, so correcting the same keyword twice updates
+    // the existing row instead of erroring or duplicating.
+    const { error } = await supabase
+      .from('parse_corrections')
+      .upsert(
+        { user_id: userId, pattern_key: patternKey, corrected_category: correctedCategory, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,pattern_key' }
+      );
+    assertNoError(error, 'saving that correction');
+  },
+
+  // ---------------- Net worth (assets & debts) ----------------
+  async getAssets(userId) {
+    const { data, error } = await supabase
+      .from('assets')
+      .select('id, name, type, value')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+    assertNoError(error, 'loading your assets');
+    return data.map((a) => ({ id: a.id, name: a.name, type: a.type, value: Number(a.value) }));
+  },
+
+  async addAsset(userId, payload) {
+    const { data, error } = await supabase
+      .from('assets')
+      .insert({ user_id: userId, name: payload.name, type: payload.type, value: payload.value })
+      .select('id, name, type, value')
+      .single();
+    assertNoError(error, 'adding that');
+    return { id: data.id, name: data.name, type: data.type, value: Number(data.value) };
+  },
+
+  async removeAsset(id) {
+    const { error } = await supabase.from('assets').delete().eq('id', id);
+    assertNoError(error, 'removing that');
+  },
+
+  // Last 90 days — enough for a meaningful trend line without loading
+  // an ever-growing history for someone who's used this for years.
+  async getNetWorthHistory(userId) {
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const { data, error } = await supabase
+      .from('net_worth_snapshots')
+      .select('date, total_assets, total_debts, net_worth')
+      .eq('user_id', userId)
+      .gte('date', ninetyDaysAgo.toISOString().slice(0, 10))
+      .order('date', { ascending: true });
+    assertNoError(error, 'loading your net worth history');
+    return data.map((s) => ({
+      date: s.date,
+      totalAssets: Number(s.total_assets),
+      totalDebts: Number(s.total_debts),
+      netWorth: Number(s.net_worth),
+    }));
   },
 };
