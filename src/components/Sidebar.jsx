@@ -1,37 +1,38 @@
 import { motion } from 'framer-motion';
-import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Download, LogOut, Gem, CreditCard, ShieldCheck } from 'lucide-react';
+import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Target, Landmark, Download, LogOut, Gem, CreditCard, ShieldCheck } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
 
 export const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
-  { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { id: 'budgets', label: 'Budgets', icon: PiggyBank, pro: true },
-  { id: 'recurring', label: 'Recurring', icon: Repeat, pro: true },
-  { id: 'export', label: 'Export Data', icon: Download, pro: true },
-  { id: 'billing', label: 'Billing', icon: CreditCard },
+  { id: 'dashboard', path: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
+  { id: 'transactions', path: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { id: 'budgets', path: '/budgets', label: 'Budgets', icon: PiggyBank, pro: true },
+  { id: 'recurring', path: '/recurring', label: 'Recurring', icon: Repeat, pro: true },
+  { id: 'goals', path: '/goals', label: 'Goals', icon: Target, pro: true },
+  { id: 'debts', path: '/debts', label: 'Debts', icon: Landmark, pro: true },
+  { id: 'export', path: '/export', label: 'Export Data', icon: Download, pro: true },
+  { id: 'billing', path: '/billing', label: 'Billing', icon: CreditCard },
 ];
 
-export default function Sidebar({ activeView, onNavigate }) {
+export default function Sidebar() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const session = useStore((s) => s.session);
   const profile = useStore((s) => s.profile);
   const logout = useStore((s) => s.logout);
   const openUpgradeModal = useStore((s) => s.openUpgradeModal);
-  const { isPro } = useProStatus(); // sourced from the `subscriptions` table, not local state
+  const { isPro } = useProStatus();
   const displayName = profile?.displayName || session?.email?.split('@')[0] || 'Guest';
 
-  // Hidden from the nav for non-admins — the real access control is
-  // server-side (RLS on manual_payments, and review-manual-payment
-  // re-checking is_admin itself), so this is a UX convenience, not the
-  // security boundary.
-  const navItems = profile?.isAdmin ? [...NAV_ITEMS, { id: 'admin', label: 'Admin', icon: ShieldCheck }] : NAV_ITEMS;
+  const navItems = profile?.isAdmin ? [...NAV_ITEMS, { id: 'admin', path: '/admin', label: 'Admin', icon: ShieldCheck }] : NAV_ITEMS;
 
   const handleClick = (item) => {
     if (item.pro && !isPro) {
       openUpgradeModal(item.label.toLowerCase());
       return;
     }
-    onNavigate(item.id);
+    navigate(item.path);
   };
 
   return (
@@ -41,12 +42,12 @@ export default function Sidebar({ activeView, onNavigate }) {
           <div className="w-8 h-8 rounded-lg bg-gilt-gradient flex items-center justify-center">
             <Gem size={16} className="text-obsidian-950" strokeWidth={2.5} />
           </div>
-          <span className="text-lg font-semibold tracking-tight">Obsidian</span>
+          <span className="text-lg font-semibold tracking-tight text-slate-50">Obsidian</span>
         </div>
 
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => {
-            const active = activeView === item.id;
+            const active = location.pathname === item.path;
             return (
               <button
                 key={item.id}

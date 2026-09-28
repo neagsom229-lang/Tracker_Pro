@@ -6,6 +6,7 @@ dist/
 .DS_Store
 *.log
 .vercel
+rsa_private_key.txt
 
 # Supabase CLI scratch state. Not secret, but it pins your project ref,
 # org id and pooler host into the repo for anyone who clones it — and it

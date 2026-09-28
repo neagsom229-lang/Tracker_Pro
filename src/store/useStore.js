@@ -94,6 +94,8 @@ export const useStore = create((set, get) => ({
   profile: null, // { currency, displayName } — account settings only, not billing
   parseCorrections: {}, // { [normalizedKeyword]: categoryId } — feeds parseQuickAddText()
   assets: [], // [{ id, name, type: 'cash'|'investment'|'property'|'debt', value }]
+  goals: [], // [{ id, name, targetAmount, currentAmount, deadline }]
+  debts: [], // [{ id, name, balance, initialBalance, interestRate, minimumPayment }]
   netWorthHistory: [], // [{ date, totalAssets, totalDebts, netWorth }] — last 90 days, from net_worth_snapshots
   dataLoading: true,
   dataError: null,
@@ -437,16 +439,22 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  // ---------------- UI state (modals) ----------------
+  // ---------------- UI state (modals & theme) ----------------
   isTransactionModalOpen: false,
   editingTransactionId: null,
   isUpgradeModalOpen: false,
   upgradeReason: '',
+  theme: localStorage.getItem('theme') || 'dark',
 
   openTransactionModal: (id = null) => set({ isTransactionModalOpen: true, editingTransactionId: id }),
   closeTransactionModal: () => set({ isTransactionModalOpen: false, editingTransactionId: null }),
   openUpgradeModal: (reason = 'this feature') => set({ isUpgradeModalOpen: true, upgradeReason: reason }),
   closeUpgradeModal: () => set({ isUpgradeModalOpen: false }),
+  setTheme: (theme) => {
+    localStorage.setItem('theme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    set({ theme });
+  },
 
   // Pro-gating now happens in components via the useProStatus() hook
   // (e.g. Sidebar/MobileNav check `isPro` from that hook directly, then
@@ -481,3 +489,16 @@ export const selectSpendingThisMonth = (transactions) => {
 };
 
 export const selectUnreadCount = (notifications) => notifications.filter((n) => !n.read).length;
+
+export const selectGoalTotals = (goals) => {
+  const totalTarget = goals.reduce((s, g) => s + g.targetAmount, 0);
+  const totalSaved = goals.reduce((s, g) => s + g.currentAmount, 0);
+  return { totalTarget, totalSaved, overallProgress: totalTarget > 0 ? totalSaved / totalTarget : 0 };
+};
+
+export const selectDebtTotals = (debts) => {
+  const totalDebt = debts.reduce((s, d) => s + d.balance, 0);
+  const totalInitial = debts.reduce((s, d) => s + d.initialBalance, 0);
+  const totalMinimum = debts.reduce((s, d) => s + d.minimumPayment, 0);
+  return { totalDebt, totalInitial, totalMinimum };
+};

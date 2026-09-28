@@ -1,4 +1,5 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Gem, AlertCircle, RefreshCw } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
@@ -15,28 +16,19 @@ import CommandPalette from './components/CommandPalette';
 import DashboardSkeleton from './components/skeletons/DashboardSkeleton';
 import TransactionListSkeleton from './components/skeletons/TransactionListSkeleton';
 
-// Route-level code splitting: each view panel becomes its own JS chunk,
-// fetched only the first time the user actually navigates to it, instead
-// of all six shipping in the initial bundle. This matters most for:
-//  - Dashboard, which pulls in recharts (a genuinely large dependency)
-//  - Budgets / Recurring / Export, which are Pro-only — a free user who
-//    never upgrades never downloads that code at all
-// TransactionModal and UpgradeModal are deliberately NOT lazy: they're
-// used from every view (the "Add Transaction" button lives in TopBar
-// across the whole app) and are small, so splitting them would only add
-// a Suspense-fallback flicker on a frequent interaction for no real
-// bundle-size win.
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const TransactionList = lazy(() => import('./components/TransactionList'));
 const BudgetProgress = lazy(() => import('./components/BudgetProgress'));
 const RecurringManager = lazy(() => import('./components/RecurringManager'));
+const GoalManager = lazy(() => import('./components/GoalManager'));
+const DebtManager = lazy(() => import('./components/DebtManager'));
 const ExportPanel = lazy(() => import('./components/ExportPanel'));
 const BillingPanel = lazy(() => import('./components/BillingPanel'));
 const AdminPaymentsPanel = lazy(() => import('./components/AdminPaymentsPanel'));
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-obsidian-950">
       <motion.div
         animate={{ opacity: [0.4, 1, 0.4] }}
         transition={{ repeat: Infinity, duration: 1.4 }}
@@ -50,7 +42,7 @@ function LoadingScreen() {
 
 function DataErrorScreen({ message, onRetry }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-obsidian-950">
       <div className="glass-strong rounded-3xl p-8 max-w-sm text-center shadow-glass">
         <div className="w-12 h-12 rounded-2xl bg-expense-soft flex items-center justify-center mx-auto mb-5">
           <AlertCircle size={22} className="text-expense" />
@@ -65,27 +57,7 @@ function DataErrorScreen({ message, onRetry }) {
   );
 }
 
-// Views that render their OWN skeleton while `dataLoading` is true get
-// listed here; simpler views (budgets/recurring/export/billing) just wait
-// for the generic LoadingScreen since they're short, list-shaped panels
-// that don't benefit as much from a bespoke skeleton.
-const VIEWS = {
-  dashboard: Dashboard,
-  transactions: () => <TransactionList />,
-  budgets: BudgetProgress,
-  recurring: RecurringManager,
-  export: ExportPanel,
-  billing: BillingPanel,
-  // Not access-controlled here — a non-admin manually forcing activeView
-  // to 'admin' would just see an empty list, since RLS ("Admins can view
-  // all manual payments") only returns other users' rows to profiles
-  // with is_admin = true, and review-manual-payment independently
-  // re-checks is_admin server-side before approving anything. The
-  // Sidebar nav item is hidden from non-admins for UX, not security.
-  admin: AdminPaymentsPanel,
-};
-
-export default function App() {
+function AppContent() {
   const session = useStore((s) => s.session);
   const authLoading = useStore((s) => s.authLoading);
   const isPasswordRecovery = useStore((s) => s.isPasswordRecovery);
@@ -94,20 +66,15 @@ export default function App() {
   const initAuth = useStore((s) => s.initAuth);
   const initData = useStore((s) => s.initData);
   const { refresh: refreshProStatus } = useProStatus();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [activeView, setActiveView] = useState('dashboard');
+  const activeView = location.pathname.replace('/', '') || 'dashboard';
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
-  // The Stripe Payment Link is configured (in the Stripe Dashboard, not
-  // in code — see README) to redirect back here with `?success=true`
-  // once payment completes. The webhook usually lands within a second or
-  // two of that redirect, and useProStatus()'s Realtime subscription
-  // will pick it up on its own — but we also force one explicit refetch
-  // right here so the "Welcome to Pro" toast and unlocked UI show up
-  // immediately instead of waiting on Realtime's round trip.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === 'true' && session) {
@@ -117,36 +84,26 @@ export default function App() {
     }
   }, [session, refreshProStatus]);
 
-  // CommandPalette dispatches this instead of taking setActiveView as a
-  // prop, to stay decoupled from activeView living as local state here
-  // rather than in the store (see the comment in CommandPalette.jsx).
   useEffect(() => {
-    const handleNavigate = (e) => setActiveView(e.detail);
+    const handleNavigate = (e) => navigate(`/${e.detail}`);
     window.addEventListener('obsidian:navigate', handleNavigate);
     return () => window.removeEventListener('obsidian:navigate', handleNavigate);
-  }, []);
+  }, [navigate]);
 
   if (authLoading) return <LoadingScreen />;
-  // Checked BEFORE the normal `!session` gate: a password-recovery link
-  // click gives the user a real session (see the comment on
-  // isPasswordRecovery in useStore.js), so without this check they'd
-  // skip straight to the Dashboard instead of being asked to actually
-  // set a new password.
   if (isPasswordRecovery) return <ResetPasswordScreen />;
   if (!session) return <AuthScreen />;
   if (dataError) return <DataErrorScreen message={dataError} onRetry={initData} />;
 
-  const ActiveComponent = VIEWS[activeView];
-
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-obsidian-950 text-slate-100">
       <Toaster
         position="top-right"
         toastOptions={{
           style: { background: '#13141B', color: '#E2E8F0', border: '1px solid rgba(255,255,255,0.08)' },
         }}
       />
-      <Sidebar activeView={activeView} onNavigate={setActiveView} />
+      <Sidebar />
 
       <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-6xl mx-auto w-full">
         <TopBar activeView={activeView} />
@@ -163,17 +120,36 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.25 }}
               >
-                <ActiveComponent />
+                <Routes>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/transactions" element={<TransactionList />} />
+                  <Route path="/budgets" element={<BudgetProgress />} />
+                  <Route path="/recurring" element={<RecurringManager />} />
+                  <Route path="/goals" element={<GoalManager />} />
+                  <Route path="/debts" element={<DebtManager />} />
+                  <Route path="/export" element={<ExportPanel />} />
+                  <Route path="/billing" element={<BillingPanel />} />
+                  <Route path="/admin" element={<AdminPaymentsPanel />} />
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
               </motion.div>
             </AnimatePresence>
           </Suspense>
         )}
       </main>
 
-      <MobileNav activeView={activeView} onNavigate={setActiveView} />
+      <MobileNav />
       <TransactionModal />
       <UpgradeModal />
       <CommandPalette />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
