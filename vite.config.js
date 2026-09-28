@@ -8,7 +8,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
           charts: ['recharts'],
           motion: ['framer-motion'],
           supabase: ['@supabase/supabase-js'],
