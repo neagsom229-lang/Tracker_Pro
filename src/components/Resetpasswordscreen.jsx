@@ -104,7 +104,7 @@ export default function ResetPasswordScreen() {
         </div>
 
         <h1 className="text-2xl font-semibold text-slate-50 mb-1">Choose a new password</h1>
-        <p className="text-sm text-slate-400 mb-6">You'll be signed in automatically once it's saved.</p>
+        <p className="text-sm text-slate-400 mb-6">You&apos;ll be signed in automatically once it&apos;s saved.</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>
@@ -117,7 +117,6 @@ export default function ResetPasswordScreen() {
               required
               minLength={8}
               autoComplete="new-password"
-              autoFocus
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"

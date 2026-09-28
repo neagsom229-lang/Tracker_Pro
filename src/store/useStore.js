@@ -444,15 +444,17 @@ export const useStore = create((set, get) => ({
   editingTransactionId: null,
   isUpgradeModalOpen: false,
   upgradeReason: '',
-  theme: localStorage.getItem('theme') || 'dark',
+  theme: typeof window !== 'undefined' && window.localStorage ? (localStorage.getItem('theme') || 'dark') : 'dark',
 
   openTransactionModal: (id = null) => set({ isTransactionModalOpen: true, editingTransactionId: id }),
   closeTransactionModal: () => set({ isTransactionModalOpen: false, editingTransactionId: null }),
   openUpgradeModal: (reason = 'this feature') => set({ isUpgradeModalOpen: true, upgradeReason: reason }),
   closeUpgradeModal: () => set({ isUpgradeModalOpen: false }),
   setTheme: (theme) => {
-    localStorage.setItem('theme', theme);
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', theme);
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    }
     set({ theme });
   },
 

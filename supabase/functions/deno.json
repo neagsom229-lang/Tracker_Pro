@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.ns", "dom"]
+  },
+  "imports": {
+    "stripe": "npm:stripe@17.5.0",
+    "bakong-khqr": "npm:bakong-khqr@1.0.6"
+  }
+}

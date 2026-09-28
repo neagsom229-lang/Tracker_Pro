@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Gem, ArrowRight, MailCheck, AlertCircle, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -113,12 +113,10 @@ export default function AuthScreen() {
   // `feedback` is a single { kind, text } object rather than three
   // separate booleans, so only one message can ever be on screen at once
   // and switching modes clears it in one place.
-  const [feedback, setFeedback] = useState(null);
-
-  useEffect(() => {
+  const [feedback, setFeedback] = useState(() => {
     const linkError = readLinkErrorFromUrl();
-    if (linkError) setFeedback({ kind: 'error', text: linkError });
-  }, []);
+    return linkError ? { kind: 'error', text: linkError } : null;
+  });
 
   const switchMode = (next) => {
     setMode(next);

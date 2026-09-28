@@ -45,7 +45,12 @@ export default function NotificationBell() {
       <AnimatePresence>
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <button
+              type="button"
+              aria-label="Close notifications overlay"
+              className="fixed inset-0 z-40 bg-transparent border-0 cursor-default"
+              onClick={() => setIsOpen(false)}
+            />
             <motion.div
               initial={{ opacity: 0, y: -8, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -63,7 +68,7 @@ export default function NotificationBell() {
               </div>
 
               {notifications.length === 0 && (
-                <p className="text-sm text-slate-500 text-center py-8">You're all caught up.</p>
+                <p className="text-sm text-slate-500 text-center py-8">You&apos;re all caught up.</p>
               )}
 
               {notifications.map((n) => (

@@ -50,9 +50,10 @@ export default function AIQuickAdd() {
   const [aiLoading, setAiLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const direction = preview?.direction;
   const visibleCategories = useMemo(
-    () => CATEGORIES.filter((c) => c.type === (preview?.direction || 'expense')),
-    [preview?.direction]
+    () => CATEGORIES.filter((c) => c.type === (direction || 'expense')),
+    [direction]
   );
 
   const handleSubmit = async (e) => {
@@ -162,16 +163,18 @@ export default function AIQuickAdd() {
 
             <div className="grid grid-cols-2 gap-2.5 mb-3">
               <div className="col-span-2">
-                <label className="text-[11px] text-slate-500 mb-1 block">Description</label>
+                <label htmlFor="ai-desc" className="text-[11px] text-slate-500 mb-1 block">Description</label>
                 <input
+                  id="ai-desc"
                   value={preview.description}
                   onChange={(e) => setPreview((p) => ({ ...p, description: e.target.value }))}
                   className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-500 mb-1 block">Amount</label>
+                <label htmlFor="ai-amount" className="text-[11px] text-slate-500 mb-1 block">Amount</label>
                 <input
+                  id="ai-amount"
                   type="number"
                   step="0.01"
                   min="0"
@@ -181,8 +184,9 @@ export default function AIQuickAdd() {
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-500 mb-1 block">Date</label>
+                <label htmlFor="ai-date" className="text-[11px] text-slate-500 mb-1 block">Date</label>
                 <input
+                  id="ai-date"
                   type="date"
                   value={preview.date}
                   onChange={(e) => setPreview((p) => ({ ...p, date: e.target.value }))}
@@ -190,7 +194,7 @@ export default function AIQuickAdd() {
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-500 mb-1 block">Type</label>
+                <span className="text-[11px] text-slate-500 mb-1 block">Type</span>
                 <div className="flex rounded-lg overflow-hidden border border-white/8">
                   {['expense', 'income'].map((dir) => (
                     <button
@@ -209,8 +213,9 @@ export default function AIQuickAdd() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-slate-500 mb-1 block">Category</label>
+                <label htmlFor="ai-category" className="text-[11px] text-slate-500 mb-1 block">Category</label>
                 <select
+                  id="ai-category"
                   value={preview.category}
                   onChange={(e) => setPreview((p) => ({ ...p, category: e.target.value }))}
                   className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"

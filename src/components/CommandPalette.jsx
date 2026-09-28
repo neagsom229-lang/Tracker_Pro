@@ -3,6 +3,7 @@ import { Command } from 'cmdk';
 import { Search, Plus, LogOut, Sparkles, ArrowRight } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { NAV_ITEMS } from './Sidebar';
 import { fuzzySearch } from '../utils/fuzzyMatch';
 import { formatMoney } from '../utils/format';
@@ -63,27 +64,35 @@ export default function CommandPalette() {
   const logout = useStore((s) => s.logout);
   const { isPro } = useProStatus();
 
+  const closePalette = () => {
+    setOpen(false);
+    setQuery('');
+  };
+
+  useEscapeKey(open, closePalette);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setOpen((v) => !v);
+        setOpen((v) => {
+          const next = !v;
+          if (!next) setQuery('');
+          return next;
+        });
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Reset the query every time the palette closes, so reopening it never
-  // shows stale results from last time.
-  useEffect(() => {
-    if (!open) setQuery('');
-  }, [open]);
-
-  const navigate = (viewId) => window.dispatchEvent(new CustomEvent('obsidian:navigate', { detail: viewId }));
+  const navigate = (viewId) => {
+    window.dispatchEvent(new CustomEvent('obsidian:navigate', { detail: viewId }));
+    closePalette();
+  };
   const runAndClose = (fn) => {
     fn();
-    setOpen(false);
+    closePalette();
   };
 
   // --- Pages: the exact same NAV_ITEMS Sidebar renders, so there's no

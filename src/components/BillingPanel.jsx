@@ -59,7 +59,7 @@ export default function BillingPanel() {
   const handleRefresh = async () => {
     try {
       await refresh();
-    } catch (err) {
+    } catch {
       toast.error('Could not refresh status. Try again in a moment.');
     }
   };
@@ -86,7 +86,7 @@ export default function BillingPanel() {
       {isPro && (
         <>
           <p className="text-sm text-slate-400 mb-1">
-            You're on the <span className="gilt-text font-semibold">Pro plan</span>
+            You&apos;re on the <span className="gilt-text font-semibold">Pro plan</span>
             {subscription?.plan_name ? ` (${subscription.plan_name})` : ''}.
           </p>
           <p className="text-xs text-slate-500 mb-1">
@@ -163,7 +163,7 @@ export default function BillingPanel() {
           <p className="text-xs text-slate-500 mb-4 flex items-start gap-1.5">
             <CheckCircle2 size={13} className="text-income shrink-0 mt-0.5" />
             <span>
-              You'll see a notification and this panel will update automatically the moment
+              You&apos;ll see a notification and this panel will update automatically the moment
               Pro is unlocked. No need to refresh.
             </span>
           </p>
@@ -182,7 +182,7 @@ export default function BillingPanel() {
       {!isPro && !isPendingReview && (
         <>
           <p className="text-sm text-slate-400 mb-1">
-            You're on the Free plan
+            You&apos;re on the Free plan
             {subscription?.status === 'past_due' && (
               <span className="text-expense"> — your last payment failed.</span>
             )}

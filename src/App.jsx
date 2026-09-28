@@ -47,7 +47,7 @@ function DataErrorScreen({ message, onRetry }) {
         <div className="w-12 h-12 rounded-2xl bg-expense-soft flex items-center justify-center mx-auto mb-5">
           <AlertCircle size={22} className="text-expense" />
         </div>
-        <h1 className="text-lg font-semibold text-slate-50 mb-1">Couldn't reach your data</h1>
+        <h1 className="text-lg font-semibold text-slate-50 mb-1">Couldn&apos;t reach your data</h1>
         <p className="text-sm text-slate-400 mb-6">{message}</p>
         <button onClick={onRetry} className="gilt-btn rounded-xl px-5 py-2.5 text-sm w-full flex items-center justify-center gap-2">
           <RefreshCw size={15} /> Try again

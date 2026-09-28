@@ -105,7 +105,7 @@ export default function NetWorth() {
         </div>
       ) : (
         <p className="text-xs text-slate-600 italic mb-2">
-          Your trend line will build up day by day as your net worth changes — there's no way to show history from before you started tracking it here.
+          Your trend line will build up day by day as your net worth changes — there&apos;s no way to show history from before you started tracking it here.
         </p>
       )}
 

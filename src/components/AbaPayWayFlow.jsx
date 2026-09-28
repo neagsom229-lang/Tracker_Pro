@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, CheckCircle2, Smartphone, AlertCircle,
@@ -34,7 +34,27 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
 
   const amount = PLAN_PRICES[plan] ?? 4.99;
 
-  const startCountdown = useCallback(() => {
+  // Kick off the timer on mount, clear on unmount
+  useEffect(() => {
+    tickRef.current = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(tickRef.current);
+          setExpired(true);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tickRef.current);
+  }, []);
+
+  const handleRefreshQr = () => {
+    // Note: this only resets the timer. The static KHQR payload is
+    // immutable — it doesn't actually change. Once you have a real
+    // ABA merchant account, this button will call the API again to
+    // fetch a fresh dynamic QR.
+    toast.success('QR refreshed.');
     clearInterval(tickRef.current);
     setSecondsLeft(EXPIRY_SECONDS);
     setExpired(false);
@@ -48,21 +68,6 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
         return s - 1;
       });
     }, 1000);
-  }, []);
-
-  // Kick off the timer on mount, clear on unmount
-  useEffect(() => {
-    startCountdown();
-    return () => clearInterval(tickRef.current);
-  }, [startCountdown]);
-
-  const handleRefreshQr = () => {
-    // Note: this only resets the timer. The static KHQR payload is
-    // immutable — it doesn't actually change. Once you have a real
-    // ABA merchant account, this button will call the API again to
-    // fetch a fresh dynamic QR.
-    toast.success('QR refreshed.');
-    startCountdown();
   };
 
   const handleCopy = async (value) => {
@@ -120,8 +125,8 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
         <CheckCircle2 size={48} className="text-income" />
         <h3 className="text-lg font-semibold text-slate-50">Payment claim received</h3>
         <p className="text-sm text-slate-400 max-w-[280px]">
-          We'll verify your transfer and unlock Pro within a few hours.
-          You'll see a notification the moment it's confirmed.
+          We&apos;ll verify your transfer and unlock Pro within a few hours.
+          You&apos;ll see a notification the moment it&apos;s confirmed.
         </p>
         <button onClick={onSuccess} className="gilt-btn rounded-xl px-5 py-2.5 text-sm mt-2">
           Got it
@@ -257,7 +262,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
           disabled={submitting || expired || reference.trim().length < 4}
           className="gilt-btn w-full rounded-xl py-2.5 text-sm mt-3 disabled:opacity-50"
         >
-          {submitting ? 'Recording…' : expired ? 'QR expired — refresh to continue' : "I've paid — submit for verification"}
+          {submitting ? 'Recording…' : expired ? 'QR expired — refresh to continue' : "I&apos;ve paid — submit for verification"}
         </button>
 
         <p className="text-[10px] text-slate-500 text-center mt-2">

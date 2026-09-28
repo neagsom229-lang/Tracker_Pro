@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useSpring, useTransform } from 'framer-motion';
+import { useSpring } from 'framer-motion';
 import { getCurrency } from '../utils/constants';
 
 /**

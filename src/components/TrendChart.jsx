@@ -121,7 +121,8 @@ function CustomTooltip({ active, payload, currency }) {
 
 export default function TrendChart({ transactions = [], windowDays = 30, showForecast = true }) {
   const currency = useStore((s) => s.profile?.currency || 'USD');
-  const recurring = useStore((s) => s.recurring) ?? [];
+  const recurringRaw = useStore((s) => s.recurring);
+  const recurring = useMemo(() => recurringRaw ?? [], [recurringRaw]);
 
   const { data, todayLabel, hasForecast } = useMemo(() => {
     if (!transactions || transactions.length === 0) {

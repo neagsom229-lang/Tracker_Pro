@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -18,26 +18,22 @@ export default function TransactionModal() {
 
   useEscapeKey(isOpen, closeTransactionModal);
 
-  const [form, setForm] = useState(emptyForm);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
+  const [form, setForm] = useState(() => {
     if (editingId) {
       const t = transactions.find((tx) => tx.id === editingId);
       if (t) {
-        setForm({
+        return {
           description: t.description,
           amount: Math.abs(t.amount).toString(),
           date: t.date,
           category: t.category,
           direction: t.amount > 0 ? 'income' : 'expense',
-        });
+        };
       }
-    } else {
-      setForm(emptyForm);
     }
-    setError('');
-  }, [editingId, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+    return emptyForm;
+  });
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -118,9 +114,9 @@ export default function TransactionModal() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Description</label>
+                <label htmlFor="tx-desc" className="text-xs text-slate-400 mb-1 block">Description</label>
                 <input
-                  autoFocus
+                  id="tx-desc"
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   placeholder="e.g. Grocery run"
@@ -130,8 +126,9 @@ export default function TransactionModal() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Amount</label>
+                  <label htmlFor="tx-amount" className="text-xs text-slate-400 mb-1 block">Amount</label>
                   <input
+                    id="tx-amount"
                     type="number"
                     step="0.01"
                     value={form.amount}
@@ -141,8 +138,9 @@ export default function TransactionModal() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Date</label>
+                  <label htmlFor="tx-date" className="text-xs text-slate-400 mb-1 block">Date</label>
                   <input
+                    id="tx-date"
                     type="date"
                     value={form.date}
                     onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
@@ -152,8 +150,9 @@ export default function TransactionModal() {
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">Category</label>
+                <label htmlFor="tx-category" className="text-xs text-slate-400 mb-1 block">Category</label>
                 <select
+                  id="tx-category"
                   value={form.category}
                   onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                   className="w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
