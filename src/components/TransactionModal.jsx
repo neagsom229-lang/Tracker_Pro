@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react';
 import { useStore } from '../store/useStore';
+import { getLastQuickAddDefaults, setLastQuickAddDefaults } from '../utils/quickAddDefaults';
 import { CATEGORIES } from '../utils/constants';
 import ReceiptScanner from './ReceiptScanner';
 import Modal from './Modal';
@@ -31,7 +32,8 @@ export default function TransactionModal() {
         };
       }
     }
-    return emptyForm;
+    const defaults = getLastQuickAddDefaults();
+    return { ...emptyForm, category: defaults.category || 'food', direction: defaults.direction || 'expense' };
   });
 
   const errors = [];
@@ -53,6 +55,7 @@ export default function TransactionModal() {
       const payload = { description: form.description.trim(), amount: signedAmount, date: form.date, category: form.category };
       if (editingId) await updateTransaction(editingId, payload);
       else await addTransaction(payload);
+      setLastQuickAddDefaults({ category: form.category, direction: form.direction });
       closeTransactionModal();
     } finally {
       setSubmitting(false);

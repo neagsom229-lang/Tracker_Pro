@@ -6,6 +6,7 @@ import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
 import { parseTransactionText } from '../lib/ai';
 import { parseQuickAddText } from '../utils/parseQuickAdd';
+import { setLastQuickAddDefaults } from '../utils/quickAddDefaults';
 import { CATEGORIES, getCategory } from '../utils/constants';
 
 /**
@@ -97,6 +98,7 @@ export default function AIQuickAdd() {
     if (!preview.amount || preview.amount <= 0) return toast.error('Enter an amount greater than zero.');
     setSubmitting(true);
     try {
+      setLastQuickAddDefaults({ category: preview.category, direction: preview.direction });
       await addTransaction({
         description: preview.description,
         amount: preview.direction === 'income' ? preview.amount : -preview.amount,
