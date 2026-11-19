@@ -1,18 +1,18 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Landmark, Plus, Trash2, TrendingDown, PartyPopper } from 'lucide-react';
 import { useStore, selectDebtTotals } from '../store/useStore';
 import { formatMoney } from '../utils/format';
 
 const INPUT_CLASS =
-  'w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 ' +
+  'w-full bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 ' +
   'focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition';
 
 /**
  * Months to payoff at the current minimum payment, using the standard
- * amortisation formula:  n = -log(1 - r·B/P) / log(1 + r)
+ * amortisation formula:  n = -log(1 - rÂ·B/P) / log(1 + r)
  *
- * Returns null when the debt can never be paid off at that rate — which
+ * Returns null when the debt can never be paid off at that rate â€” which
  * happens whenever the monthly interest exceeds the payment. That case
  * is not an edge case to swallow: it's the single most useful thing this
  * screen can tell someone, so the UI surfaces it explicitly instead of
@@ -69,7 +69,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
   };
 
   return (
-    <div className="rounded-xl border border-white/8 bg-obsidian-800/40 p-4">
+    <div className="rounded-xl border border-white/8 bg-muted p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             {debt.interestRate > 0 ? `${debt.interestRate}% APR` : 'No interest'}
-            {debt.minimumPayment > 0 && ` · min ${formatMoney(debt.minimumPayment, currency)}/mo`}
+            {debt.minimumPayment > 0 && ` Â· min ${formatMoney(debt.minimumPayment, currency)}/mo`}
           </p>
         </div>
         <button
@@ -91,10 +91,10 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
       </div>
 
       <div className="flex items-baseline justify-between text-sm mb-1.5">
-        <span className={`font-medium ${paidOff ? 'text-income' : 'text-slate-200'}`}>
+        <span className={`font-medium ${paidOff ? 'text-income' : 'text-slate-200'} tabular-nums`}>
           {paidOff ? 'Paid off' : formatMoney(debt.balance, currency)}
         </span>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-500 tabular-nums">
           {formatMoney(debt.initialBalance - debt.balance, currency)} paid
         </span>
       </div>
@@ -120,7 +120,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
           <p className="text-xs mt-2">
             {months === null ? (
               <span className="text-expense">
-                At {formatMoney(debt.minimumPayment, currency)}/mo the interest outpaces the payment — this
+                At {formatMoney(debt.minimumPayment, currency)}/mo the interest outpaces the payment â€” this
                 balance will never clear. Raise the payment.
               </span>
             ) : (
@@ -148,7 +148,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
               disabled={busy}
               className="gilt-btn rounded-lg px-3.5 py-2 text-xs shrink-0 disabled:opacity-60"
             >
-              {busy ? 'Saving…' : 'Pay'}
+              {busy ? 'Savingâ€¦' : 'Pay'}
             </button>
           </form>
         </>
@@ -228,7 +228,7 @@ export default function DebtManager() {
           ) : (
             <span className="flex items-center gap-1.5">
               <TrendingDown size={11} />
-              {formatMoney(totals.totalBalance, currency)} outstanding ·{' '}
+              <span className="tabular-nums">{formatMoney(totals.totalBalance, currency)} outstanding</span> Â·{' '}
               {Math.round(totals.payoffProgress * 100)}% paid off
             </span>
           )}
@@ -318,7 +318,7 @@ export default function DebtManager() {
             disabled={creating}
             className="gilt-btn rounded-xl px-4 py-2.5 text-sm flex items-center justify-center gap-2 sm:self-start disabled:opacity-60"
           >
-            <Plus size={15} /> {creating ? 'Adding…' : 'Add debt'}
+            <Plus size={15} /> {creating ? 'Addingâ€¦' : 'Add debt'}
           </button>
         </form>
       </div>

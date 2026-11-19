@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Search, Pencil, Trash2, SlidersHorizontal } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -46,7 +46,7 @@ export default function TransactionList({ limit }) {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search..."
                 aria-label="Search transactions"
-                className="bg-obsidian-800/60 border border-white/8 rounded-lg pl-8 pr-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition w-full sm:w-40"
+                className="bg-card border border-white/8 rounded-lg pl-8 pr-3 py-1.5 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition w-full sm:w-40"
               />
             </div>
             <button
@@ -119,12 +119,12 @@ export default function TransactionList({ limit }) {
                   {cat.label.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-200 truncate">{t.description}</p>
+                  <p className="text-sm text-slate-200 truncate" title={t.description}>{t.description}</p>
                   <p className="text-xs text-slate-500">
-                    {cat.label} · {formatDate(t.date)}
+                    {cat.label} Â· {formatDate(t.date)}
                   </p>
                 </div>
-                <span className={`text-sm font-medium tabular-nums ${isIncome ? 'text-income' : 'text-expense'}`}>
+                <span className={`text-sm font-medium tabular-nums ${isIncome ? 'text-income' : 'text-expense'}`} title={`${t.description} — ${formatMoney(t.amount, currency)}`}>
                   {isIncome ? '+' : '-'}
                   {formatMoney(Math.abs(t.amount), currency)}
                 </span>

@@ -2,6 +2,12 @@
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   darkMode: 'class',
+  // New semantic tokens are used by code we haven't written yet, so the
+  // scanner wouldn't see them; safelist them to make sure the utilities
+  // exist from the start.
+  safelist: [
+    { pattern: /^(?:bg|text|border|ring)-(?:primary|secondary|accent|warning|destructive|background|card|muted|muted-foreground|border|income|income-soft|expense|expense-soft|text|ring)$/ },
+  ],
   theme: {
     extend: {
       colors: {

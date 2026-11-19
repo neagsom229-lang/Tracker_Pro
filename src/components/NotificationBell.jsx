@@ -32,7 +32,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setIsOpen((v) => !v)}
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
-        className="relative w-9 h-9 rounded-lg glass flex items-center justify-center text-slate-300 hover:text-slate-100"
+        className="relative w-9 h-9 rounded-lg glass flex items-center justify-center text-slate-300 hover:text-slate-100 cursor-pointer"
       >
         <Bell size={16} />
         {unreadCount > 0 && (

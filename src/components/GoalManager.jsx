@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Target, Plus, Trash2, Check, CalendarClock, AlertTriangle } from 'lucide-react';
 import { useGoals } from '../hooks/useGoals';
@@ -6,7 +6,7 @@ import { useStore } from '../store/useStore';
 import { formatMoney } from '../utils/format';
 
 const INPUT_CLASS =
-  'w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 ' +
+  'w-full bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 ' +
   'focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition';
 
 function deadlineLabel(goal) {
@@ -46,7 +46,7 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
   const barColor = goal.isComplete ? 'bg-income' : goal.isOverdue ? 'bg-expense' : 'bg-gilt-gradient';
 
   return (
-    <div className="rounded-xl border border-white/8 bg-obsidian-800/40 p-4">
+    <div className="rounded-xl border border-white/8 bg-muted p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -54,13 +54,13 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
             {goal.isOverdue && <AlertTriangle size={14} className="text-expense shrink-0" />}
             <h4 className="text-sm font-medium text-slate-100 truncate">{goal.name}</h4>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1 tabular-nums">
             <CalendarClock size={11} />
             {deadlineLabel(goal)}
             {goal.requiredMonthly !== null && (
               <span className="text-slate-600">
                 {' '}
-                · {formatMoney(goal.requiredMonthly, currency)}/mo to stay on track
+                Â· {formatMoney(goal.requiredMonthly, currency)}/mo to stay on track
               </span>
             )}
           </p>
@@ -75,8 +75,8 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
       </div>
 
       <div className="flex items-baseline justify-between text-sm mb-1.5">
-        <span className="text-slate-200 font-medium">{formatMoney(goal.currentAmount, currency)}</span>
-        <span className="text-xs text-slate-500">of {formatMoney(goal.targetAmount, currency)}</span>
+        <span className="text-slate-200 font-medium tabular-nums">{formatMoney(goal.currentAmount, currency)}</span>
+        <span className="text-xs text-slate-500 tabular-nums">of {formatMoney(goal.targetAmount, currency)}</span>
       </div>
 
       <div
@@ -116,7 +116,7 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
             disabled={busy}
             className="gilt-btn rounded-lg px-3.5 py-2 text-xs shrink-0 disabled:opacity-60"
           >
-            {busy ? 'Adding…' : 'Add'}
+            {busy ? 'Addingâ€¦' : 'Add'}
           </button>
         </form>
       )}
@@ -159,12 +159,12 @@ export default function GoalManager() {
           <Target size={16} className="text-gilt-gold" />
           <h3 className="text-slate-100 font-medium">Savings Goals</h3>
         </div>
-        <p className="text-xs text-slate-500 mb-4">
+        <p className="text-xs text-slate-500 mb-4 tabular-nums">
           {goals.length === 0
             ? 'Set a target, then add funds as you save.'
             : `${formatMoney(totals.totalSaved, currency)} saved across ${goals.length} goal${
                 goals.length === 1 ? '' : 's'
-              }${totals.completed > 0 ? ` · ${totals.completed} funded` : ''}`}
+              }${totals.completed > 0 ? ` Â· ${totals.completed} funded` : ''}`}
         </p>
 
         <div className="flex flex-col gap-3">
@@ -236,7 +236,7 @@ export default function GoalManager() {
             disabled={creating}
             className="gilt-btn rounded-xl px-4 py-2.5 text-sm flex items-center justify-center gap-2 sm:self-start disabled:opacity-60"
           >
-            <Plus size={15} /> {creating ? 'Creating…' : 'Create goal'}
+            <Plus size={15} /> {creating ? 'Creatingâ€¦' : 'Create goal'}
           </button>
         </form>
       </div>

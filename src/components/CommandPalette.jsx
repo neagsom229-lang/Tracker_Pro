@@ -197,7 +197,7 @@ export default function CommandPalette() {
                   className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-300 cursor-pointer data-[selected=true]:bg-white/8 data-[selected=true]:text-slate-100"
                 >
                   <ArrowRight size={14} className="text-slate-500 shrink-0" />
-                  {categoryId} budget — {formatMoney(budgets[categoryId], profile?.currency || 'USD')}/mo
+                  {categoryId} budget — <span className="tabular-nums">{formatMoney(budgets[categoryId], profile?.currency || 'USD')}/mo</span>
                 </Command.Item>
               ))}
             </Command.Group>

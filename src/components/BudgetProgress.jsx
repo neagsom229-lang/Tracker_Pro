@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Trash2 } from 'lucide-react';
 import { useStore, selectSpendingThisMonth } from '../store/useStore';
@@ -18,7 +18,7 @@ export default function BudgetProgress() {
 
   const spending = useMemo(() => selectSpendingThisMonth(transactions), [transactions]);
   const budgetEntries = Object.entries(budgets);
-  // Savings and debt payments are transfers, not consumption — see the
+  // Savings and debt payments are transfers, not consumption â€” see the
   // `transfer` flag in constants.js for why they're not budgetable.
   const availableCategories = BUDGETABLE_CATEGORIES.filter((c) => !budgets[c.id]);
 
@@ -37,7 +37,7 @@ export default function BudgetProgress() {
 
       <div className="flex flex-col gap-4 mb-5">
         {budgetEntries.length === 0 && (
-          <p className="text-sm text-slate-500">No budgets set yet — add one below to start tracking limits.</p>
+          <p className="text-sm text-slate-500">No budgets set yet â€” add one below to start tracking limits.</p>
         )}
         {budgetEntries.map(([categoryId, limit]) => {
           const cat = getCategory(categoryId);
@@ -46,7 +46,7 @@ export default function BudgetProgress() {
           // Three tiers, matching the spec: green while comfortably under
           // budget, amber once within striking distance (80%+), red once
           // actually over. Using the raw (unclamped) ratio for the
-          // threshold checks — `pct` above is clamped to 100 for the bar
+          // threshold checks â€” `pct` above is clamped to 100 for the bar
           // width, but "over" should still mean *any* amount past 100%,
           // not just exactly 100%.
           const ratio = spent / limit;
@@ -59,12 +59,12 @@ export default function BudgetProgress() {
               <div className="flex items-center justify-between mb-1.5 text-sm">
                 <span className="text-slate-300">{cat.label}</span>
                 <div className="flex items-center gap-2">
-                  <span className={labelColor}>
+                  <span className={`${labelColor} tabular-nums`}>
                     {formatMoney(spent, currency)} / {formatMoney(limit, currency)}
                   </span>
                   <button
                     onClick={() => removeBudget(categoryId)}
-                    className="text-slate-600 hover:text-expense"
+                    className="text-slate-600 hover:text-expense cursor-pointer"
                     aria-label={`Remove ${cat.label} budget`}
                   >
                     <Trash2 size={13} />
@@ -89,7 +89,7 @@ export default function BudgetProgress() {
           <select
             value={newCategory}
             onChange={(e) => setNewCategory(e.target.value)}
-            className="bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+            className="bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
           >
             {availableCategories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -103,7 +103,7 @@ export default function BudgetProgress() {
             value={newLimit}
             onChange={(e) => setNewLimit(e.target.value)}
             placeholder="Limit"
-            className="flex-1 bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+            className="flex-1 bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
           />
           <button type="submit" className="gilt-btn rounded-lg p-2" aria-label="Add budget">
             <Plus size={16} />

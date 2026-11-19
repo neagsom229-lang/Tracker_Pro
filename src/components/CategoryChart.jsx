@@ -33,15 +33,25 @@ export default function CategoryChart({ spendingMap, transactions = [] }) {
   const currency = useStore((s) => s.profile?.currency || 'USD');
   const openTransactionModal = useStore((s) => s.openTransactionModal);
   const [drilldown, setDrilldown] = useState(null); // category id or null
+  const [showTable, setShowTable] = useState(false);
+  const [focused, setFocused] = useState(null);
+
+  const total = data.reduce((s, d) => s + Math.abs(d.value), 0);
+  const summary = data.length
+    ? `Spending by category: ${data[0].name} ${formatMoney(Math.abs(data[0].value), currency)} (${Math.round((Math.abs(data[0].value) / total) * 100)}% of spending)`
+    : '';
 
   const entries = Object.entries(spendingMap);
 
   const data = useMemo(
     () =>
-      entries.map(([categoryId, value]) => {
-        const cat = getCategory(categoryId);
-        return { id: categoryId, name: cat.label, value, color: cat.color };
-      }),
+      entries
+        .map(([categoryId, value]) => {
+          const cat = getCategory(categoryId);
+          return { id: categoryId, name: cat.label, value, color: cat.color };
+        })
+        // Skill rule: sorted bar/donut — descending by value.
+        .sort((a, b) => (b.value || 0) - (a.value || 0)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [spendingMap]
   );
@@ -111,31 +121,95 @@ export default function CategoryChart({ spendingMap, transactions = [] }) {
   }
 
   return (
-    <div className="h-64">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            innerRadius={55}
-            outerRadius={85}
-            paddingAngle={3}
-            strokeWidth={0}
-            // Recharts fires this with the datum, not the DOM event, so
-            // the category id has to be carried on the datum itself.
-            onClick={(slice) => slice?.id && setDrilldown(slice.id)}
-            className="cursor-pointer focus:outline-none"
-          >
-            {data.map((entry) => (
-              <Cell key={entry.name} fill={entry.color} />
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setShowTable((v) => !v)}
+          aria-expanded={showTable}
+          className="text-xs text-slate-300 hover:text-slate-100 hover:bg-white/5 rounded-lg px-3 py-1.5 flex items-center gap-1.5 cursor-pointer transition-colors"
+        >
+          {showTable ? 'Hide table' : 'View as table'}
+        </button>
+        {summary && (
+          <p role="status" className="text-xs text-slate-500 truncate" title={summary}>
+            {summary}
+          </p>
+        )}
+      </div>
+
+      <div
+        tabIndex={0}
+        role="img"
+        aria-label="Spending by category chart"
+        onFocus={() => setFocused(data[0])}
+        onBlur={() => setFocused(null)}
+        className="h-64 cursor-pointer"
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={55}
+              outerRadius={85}
+              paddingAngle={3}
+              strokeWidth={0}
+              // Recharts fires this with the datum, not the DOM event, so
+              // the category id has to be carried on the datum itself.
+              onClick={(slice) => slice?.id && setDrilldown(slice.id)}
+              className="cursor-pointer focus:outline-none"
+            >
+              {data.map((entry) => (
+                <Cell key={entry.name} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip currency={currency} />} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Visible labels — never color alone. */}
+      <ul className="flex flex-wrap gap-x-4 gap-y-1" role="list" aria-label="Category amounts">
+        {data.map((d) => (
+          <li key={d.id} className="flex items-center gap-1.5 text-xs text-slate-300">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+            <span className="truncate">{d.name}</span>
+            <span className="tabular-nums text-slate-400">
+              {formatMoney(Math.abs(d.value), currency)} ({Math.round((Math.abs(d.value) / total) * 100)}%)
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {showTable && (
+        <table className="w-full text-sm mt-1 border-collapse">
+          <thead>
+            <tr className="text-xs text-slate-400 border-b border-white/5 pb-1">
+              <th className="text-left py-1 pr-3 font-normal">Category</th>
+              <th className="text-right w-28 py-1 tabular-nums font-normal">Spent</th>
+              <th className="text-right w-16 py-1 tabular-nums font-normal">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.id} className="border-b border-white/5 last:border-b-0">
+                <td className="py-1 text-slate-200">
+                  <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: d.color }} />
+                  {d.name}
+                </td>
+                <td className="py-1 text-right tabular-nums text-expense">{formatMoney(Math.abs(d.value), currency)}</td>
+                <td className="py-1 text-right tabular-nums text-slate-400">
+                  {total > 0 ? Math.round((Math.abs(d.value) / total) * 100) : 0}%
+                </td>
+              </tr>
             ))}
-          </Pie>
-          <Tooltip content={<CustomTooltip currency={currency} />} />
-        </PieChart>
-      </ResponsiveContainer>
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

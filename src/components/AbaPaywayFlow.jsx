@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, CheckCircle2, Smartphone, AlertCircle,
@@ -27,7 +27,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Countdown state — resets when the user clicks "Refresh QR"
+  // Countdown state â€” resets when the user clicks "Refresh QR"
   const [secondsLeft, setSecondsLeft] = useState(EXPIRY_SECONDS);
   const [expired, setExpired] = useState(false);
   const tickRef = useRef(null);
@@ -51,7 +51,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
 
   const handleRefreshQr = () => {
     // Note: this only resets the timer. The static KHQR payload is
-    // immutable — it doesn't actually change. Once you have a real
+    // immutable â€” it doesn't actually change. Once you have a real
     // ABA merchant account, this button will call the API again to
     // fetch a fresh dynamic QR.
     toast.success('QR refreshed.');
@@ -95,7 +95,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
     setSubmitting(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Your session expired — please sign in again.');
+      if (!session) throw new Error('Your session expired â€” please sign in again.');
 
       const { error: insertError } = await supabase
         .from('manual_payments')
@@ -110,7 +110,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
       if (insertError) throw new Error(insertError.message);
 
       setSubmitted(true);
-      toast.success("Payment claim recorded — we'll confirm shortly.");
+      toast.success("Payment claim recorded â€” we'll confirm shortly.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -152,7 +152,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
         <span className="text-slate-200 font-medium">${amount.toFixed(2)} USD</span>.
       </p>
 
-      {/* QR panel — swaps between live QR and expired state */}
+      {/* QR panel â€” swaps between live QR and expired state */}
       <div className="relative mt-1">
         <AnimatePresence mode="wait">
           {!expired ? (
@@ -234,7 +234,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
         <Smartphone size={12} /> Open ABA Mobile
       </a>
 
-      {/* Confirmation form — disabled while expired */}
+      {/* Confirmation form â€” disabled while expired */}
       <div className="w-full max-w-[280px] mt-3 border-t border-white/8 pt-4">
         <label htmlFor="aba-ref" className="text-xs text-slate-400 block mb-1.5">
           After paying, paste your ABA reference number here:
@@ -247,7 +247,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
             if (error) setError('');
           }}
           placeholder="e.g. 1234567890"
-          className="w-full bg-obsidian-800/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-gilt-gold/60 disabled:opacity-50"
+          className="w-full bg-card border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-gilt-gold/60 disabled:opacity-50"
           disabled={submitting || expired}
         />
 
@@ -262,7 +262,7 @@ export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
           disabled={submitting || expired || reference.trim().length < 4}
           className="gilt-btn w-full rounded-xl py-2.5 text-sm mt-3 disabled:opacity-50"
         >
-          {submitting ? 'Recording…' : expired ? 'QR expired — refresh to continue' : "I&apos;ve paid — submit for verification"}
+          {submitting ? 'Recordingâ€¦' : expired ? 'QR expired â€” refresh to continue' : "I&apos;ve paid â€” submit for verification"}
         </button>
 
         <p className="text-[10px] text-slate-500 text-center mt-2">

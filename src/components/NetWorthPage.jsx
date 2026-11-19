@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Plus, Trash2, TrendingUp, Sparkles } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -50,7 +50,7 @@ export default function NetWorth() {
             <TrendingUp size={17} className="text-gilt-gold" />
           </div>
           <div>
-            <p className="text-sm text-slate-200 font-medium">Net Worth</p>
+            <p className="text-sm text-slate-200 font-medium tabular-nums">Net Worth</p>
             <p className="text-xs text-slate-500">Track assets and debts in one place. Pro feature.</p>
           </div>
         </div>
@@ -80,11 +80,11 @@ export default function NetWorth() {
         </button>
       </div>
 
-      <p className={`text-3xl font-semibold mb-1 ${netWorth >= 0 ? 'text-slate-100' : 'text-expense'}`}>
+      <p className={`text-3xl font-semibold tabular-nums mb-1 ${netWorth >= 0 ? 'text-slate-100' : 'text-expense'}`}>
         {formatMoney(netWorth, currency)}
       </p>
       <p className="text-xs text-slate-500 mb-4">
-        {formatMoney(totalAssets, currency)} assets — {formatMoney(totalDebts, currency)} debts
+        {formatMoney(totalAssets, currency)} assets â€” {formatMoney(totalDebts, currency)} debts
       </p>
 
       {netWorthHistory.length >= 2 ? (
@@ -105,7 +105,7 @@ export default function NetWorth() {
         </div>
       ) : (
         <p className="text-xs text-slate-600 italic mb-2">
-          Your trend line will build up day by day as your net worth changes — there&apos;s no way to show history from before you started tracking it here.
+          Your trend line will build up day by day as your net worth changes â€” there&apos;s no way to show history from before you started tracking it here.
         </p>
       )}
 
@@ -116,12 +116,12 @@ export default function NetWorth() {
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Savings account"
-              className="flex-1 min-w-[120px] bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+              className="flex-1 min-w-[120px] bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
             />
             <select
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-              className="bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+              className="bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
             >
               {ASSET_TYPES.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -136,7 +136,7 @@ export default function NetWorth() {
               value={form.value}
               onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
               placeholder="Value"
-              className="w-24 bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+              className="w-24 bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
             />
             <button type="submit" disabled={submitting} className="gilt-btn rounded-lg px-3 disabled:opacity-60">
               <Plus size={15} />

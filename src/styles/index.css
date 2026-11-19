@@ -1,13 +1,130 @@
+/* IBM Plex Sans (Google Fonts) — the finance-app typeface from the
+   design-system search; Inter is the fallback. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---- Design tokens ----------------------------------------------------
+   Source of truth: CSS custom properties. Tailwind config
+   (tailwind.config.js) maps the semantic utilities onto these values, so
+   colors, glass, focus rings and money text all change together when the
+   theme flips between `:root` (dark) and `html.light`. */
+
+:root {
+  --color-background: #0F172A;
+  --color-foreground: #F8FAFC;
+  --color-text: #F8FAFC;
+  --color-card: #192134;
+  --color-muted: #101A34;
+  --color-muted-foreground: #94A3B8;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-primary: #E8C77A;
+  --color-secondary: #9F7AEA;
+  --color-accent: #059669;
+  --color-income: #34D399;
+  --color-income-soft: rgba(52, 211, 153, 0.12);
+  --color-expense: #F87171;
+  --color-expense-soft: rgba(248, 113, 113, 0.12);
+  --color-warning: #FBBF24;
+  --color-destructive: #DC2626;
+  --color-ring: #E8C77A;
+
+  --color-obsidian-950: #07070A;
+  --color-obsidian-900: #0C0D12;
+  --color-obsidian-800: #13141B;
+  --color-obsidian-700: #1B1D27;
+  --color-obsidian-600: #262835;
+}
+
+html.light {
+  --color-background: #FFFFFF;
+  --color-foreground: #0F172A;
+  --color-text: #0F172A;
+  --color-card: #FFFFFF;
+  --color-muted: #F1F5F9;
+  --color-muted-foreground: #64748B;
+  --color-border: rgba(0, 0, 0, 0.10);
+  --color-income: #16A34A;
+  --color-income-soft: rgba(22, 163, 74, 0.10);
+  --color-expense: #DC2626;
+  --color-expense-soft: rgba(220, 38, 38, 0.10);
+  --color-warning: #92400E;
+  --color-ring: #111827;
+
+  --color-obsidian-950: #FFFFFF;
+  --color-obsidian-900: #FFFFFF;
+  --color-obsidian-800: #F8FAFC;
+  --color-obsidian-700: #F1F5F9;
+  --color-obsidian-600: #CBD5E1;
+}
+
+/* ---- Light-mode readability ----
+   The dark-slate text scale reads on dark panels but is invisible on
+   white, so flip it in light mode. The gold brand (used as accent
+   backgrounds and gradients) keeps its look; where it was used as text
+   it degrades to the dark text color to preserve the ≥4.5:1 contrast
+   requirement of the skill's pre-delivery checklist. */
+html.light {
+  .text-slate-50,
+  .text-slate-100,
+  .text-slate-200,
+  .text-slate-900,
+  .gilt-text,
+  .text-gilt-gold,
+  .text-gilt-purple {
+    color: #111827;
+  }
+
+  .text-slate-300,
+  .text-slate-400,
+  .text-slate-500,
+  .text-slate-600 {
+    color: #64748B;
+  }
+
+  .text-slate-700 {
+    color: #334155;
+  }
+
+  .placeholder\:text-slate-500::placeholder,
+  .placeholder\:text-slate-400::placeholder,
+  .placeholder\:text-slate-300::placeholder {
+    color: #94A3B8;
+  }
+
+  .border-white\/5 {
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+
+  .border-white\/8 {
+    border-color: rgba(0, 0, 0, 0.10);
+  }
+
+  .border-white\/10 {
+    border-color: rgba(0, 0, 0, 0.14);
+  }
+
+  .bg-white\/5,
+  .bg-white\/8,
+  .bg-white\/10,
+  .hover\:bg-white\/5:hover,
+  .hover\:bg-white\/8:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+  }
+}
 
 html {
   color-scheme: dark;
 }
 
+html.light {
+  color-scheme: light;
+}
+
 body {
-  @apply bg-obsidian-950 text-slate-100 antialiased;
+  @apply bg-background text-text font-sans antialiased;
   background-image:
     radial-gradient(circle at 15% 0%, rgba(159, 122, 234, 0.10), transparent 40%),
     radial-gradient(circle at 85% 20%, rgba(232, 199, 122, 0.07), transparent 40%);
@@ -16,17 +133,27 @@ body {
 
 /* Frosted glass panel used across cards, sidebar, modals */
 .glass {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
 
+html.light .glass {
+  background: rgba(0, 0, 0, 0.025);
+}
+
 .glass-strong {
-  background: linear-gradient(135deg, rgba(20, 21, 28, 0.92), rgba(12, 13, 18, 0.96));
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(135deg, rgba(20, 21, 28, 0.94), rgba(12, 13, 18, 0.98));
+  border: 1px solid var(--color-border);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+}
+
+html.light .glass-strong {
+  background: rgba(0, 0, 0, 0.03);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .gilt-text {
@@ -42,9 +169,11 @@ body {
   font-weight: 600;
   transition: filter 0.2s ease, transform 0.2s ease;
 }
+
 .gilt-btn:hover {
   filter: brightness(1.08);
 }
+
 .gilt-btn:active {
   transform: scale(0.98);
 }
@@ -54,12 +183,18 @@ body {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 8px;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
 }
 
 /* Respect reduced-motion preferences */
@@ -75,7 +210,7 @@ body {
 
 /* Visible keyboard focus ring everywhere, glass-appropriate */
 :focus-visible {
-  outline: 2px solid #9f7aea;
+  outline: 2px solid var(--color-ring);
   outline-offset: 2px;
   border-radius: 6px;
 }

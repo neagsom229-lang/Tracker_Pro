@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Gem, KeyRound, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -12,7 +12,7 @@ import { translateAuthError } from './AuthScreen';
  * The missing half of "Forgot password?". Clicking the emailed link
  * brings the user back to this app with a short-lived RECOVERY session
  * already established (supabase-js parses it out of the URL hash because
- * `detectSessionInUrl: true`). That session is a real session — which is
+ * `detectSessionInUrl: true`). That session is a real session â€” which is
  * exactly the trap: without a dedicated screen the user is silently
  * dropped onto the dashboard and never gets to set a new password.
  *
@@ -22,7 +22,7 @@ import { translateAuthError } from './AuthScreen';
  */
 
 const INPUT_CLASS =
-  'w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 ' +
+  'w-full bg-card border border-white/8 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 ' +
   'focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition';
 
 export default function ResetPasswordScreen() {
@@ -58,14 +58,14 @@ export default function ResetPasswordScreen() {
       if (msg.includes('session') || updateError.code === 'session_not_found') {
         setError('This reset link has expired. Please request a new one from the sign-in screen.');
       } else if (msg.includes('same as the old') || updateError.code === 'same_password') {
-        setError('That is already your current password — please choose a different one.');
+        setError('That is already your current password â€” please choose a different one.');
       } else {
         setError(translateAuthError(updateError).text);
       }
       return;
     }
 
-    toast.success('Password updated — you\u2019re signed in.');
+    toast.success('Password updated â€” you\u2019re signed in.');
     // Clears recoveryMode and kicks off the normal data load, so the
     // user lands on their dashboard already authenticated rather than
     // being bounced back to a login form.
@@ -119,7 +119,7 @@ export default function ResetPasswordScreen() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               className={INPUT_CLASS}
             />
             <p className="text-xs text-slate-500 mt-1">At least 8 characters.</p>
@@ -137,7 +137,7 @@ export default function ResetPasswordScreen() {
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               className={INPUT_CLASS}
             />
           </div>
@@ -156,7 +156,7 @@ export default function ResetPasswordScreen() {
             disabled={loading}
             className="gilt-btn rounded-xl py-2.5 text-sm mt-1 disabled:opacity-70"
           >
-            {loading ? 'Saving…' : 'Save new password'}
+            {loading ? 'Savingâ€¦' : 'Save new password'}
           </button>
         </form>
 

@@ -65,7 +65,7 @@ export default function UpgradeModal() {
             <div className="glass-strong rounded-3xl p-7 max-h-[85vh] overflow-y-auto">
               <button
                 onClick={handleClose}
-                className="absolute top-5 right-5 text-slate-500 hover:text-slate-200 z-10"
+                className="absolute top-5 right-5 text-slate-500 hover:text-slate-200 z-10 cursor-pointer"
                 aria-label="Close"
               >
                 <X size={18} />
@@ -116,7 +116,7 @@ export default function UpgradeModal() {
                   {/* --- Option 2: ABA KHQR (Cambodia) --- */}
                   <button
                     onClick={() => setStep('aba')}
-                    className="w-full rounded-xl py-2.5 text-sm mb-3 border border-white/10 text-slate-200 hover:text-white hover:border-white/25 flex items-center justify-center gap-2 transition"
+                    className="w-full rounded-xl py-2.5 text-sm mb-3 border border-white/10 text-slate-200 hover:text-white hover:border-white/25 flex items-center justify-center gap-2 transition cursor-pointer"
                   >
                     <Landmark size={14} /> Pay with ABA KHQR — $4.99/mo
                   </button>
@@ -127,7 +127,7 @@ export default function UpgradeModal() {
 
                   <button
                     onClick={handleClose}
-                    className="w-full rounded-xl py-2.5 text-sm text-slate-400 hover:text-slate-200"
+                    className="w-full rounded-xl py-2.5 text-sm text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
                     Maybe later
                   </button>

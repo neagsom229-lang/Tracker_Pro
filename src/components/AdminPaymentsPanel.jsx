@@ -57,7 +57,7 @@ export default function AdminPaymentsPanel() {
               <p className="text-slate-200 font-medium">{p.payerLabel}</p>
               <p className="text-xs text-slate-500">Submitted {new Date(p.submittedAt).toLocaleString()}</p>
             </div>
-            <p className="text-lg font-semibold text-slate-100">${p.amount}</p>
+            <p className="text-lg font-semibold text-slate-100 tabular-nums">${p.amount}</p>
           </div>
 
           <div className="text-sm text-slate-400 mb-4 space-y-1">
@@ -87,7 +87,7 @@ export default function AdminPaymentsPanel() {
             <button
               onClick={() => handleReview(p.id, 'reject')}
               disabled={actingOn === p.id}
-              className="flex-1 rounded-lg py-2 text-sm border border-white/10 text-slate-300 hover:border-expense hover:text-expense flex items-center justify-center gap-1.5 disabled:opacity-60"
+              className="flex-1 rounded-lg py-2 text-sm border border-white/10 text-slate-300 hover:border-expense hover:text-expense flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer"
             >
               <X size={14} /> Reject
             </button>

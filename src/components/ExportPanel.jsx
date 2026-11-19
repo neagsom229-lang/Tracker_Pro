@@ -1,10 +1,10 @@
-import { Download, FileText } from 'lucide-react';
+﻿import { Download, FileText } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { CURRENCIES } from '../utils/constants';
 import { downloadCSV } from '../utils/format';
 
 // Transaction `description` (and, in principle, `category`) is free text
-// the user typed into TransactionModal — it is intentionally NOT
+// the user typed into TransactionModal â€” it is intentionally NOT
 // sanitized there, since it's just a string in the database at that
 // point. It only becomes dangerous here, where it gets concatenated into
 // an HTML string and handed to `document.write`. Escaping the five HTML
@@ -27,7 +27,7 @@ export default function ExportPanel() {
   const setCurrency = useStore((s) => s.setCurrency);
 
   const handlePDF = () => {
-    // A lightweight "print to PDF" flow — opens the browser print dialog
+    // A lightweight "print to PDF" flow â€” opens the browser print dialog
     // pre-filled with a clean transaction report. No extra dependency
     // needed; the user just chooses "Save as PDF" as the destination.
     const rows = transactions
@@ -38,7 +38,7 @@ export default function ExportPanel() {
           }">${t.amount >= 0 ? '+' : '-'}$${escapeHtml(Math.abs(t.amount).toFixed(2))}</td></tr>`
       )
       .join('');
-    const html = `<html><head><title>Obsidian — Transaction Report</title>
+    const html = `<html><head><title>Obsidian â€” Transaction Report</title>
       <style>body{font-family:Inter,sans-serif;padding:32px;} table{width:100%;border-collapse:collapse;} td,th{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:13px;}</style>
       </head><body><h2>Transaction Report</h2><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr>${rows}</table></body></html>`;
     const win = window.open('', '_blank');
@@ -74,7 +74,7 @@ export default function ExportPanel() {
         <select
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
-          className="bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+          className="bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
         >
           {CURRENCIES.map((c) => (
             <option key={c.code} value={c.code}>

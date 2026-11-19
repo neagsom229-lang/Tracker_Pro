@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Gem, ArrowRight, MailCheck, AlertCircle, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -31,8 +31,8 @@ function GoogleMark() {
  * fall back to message sniffing for older/edge responses.
  *
  * Returns { kind, text } where `kind` drives which UI affordance shows:
- *   'error'       → red inline message
- *   'unconfirmed' → amber message + a "Resend confirmation email" button
+ *   'error'       â†’ red inline message
+ *   'unconfirmed' â†’ amber message + a "Resend confirmation email" button
  */
 export function translateAuthError(error) {
   const code = error?.code || '';
@@ -52,10 +52,10 @@ export function translateAuthError(error) {
     };
   }
   if (code === 'user_already_exists' || msg.includes('already registered') || msg.includes('user already')) {
-    return { kind: 'error', text: 'An account with this email already exists — try signing in instead.' };
+    return { kind: 'error', text: 'An account with this email already exists â€” try signing in instead.' };
   }
   if (code === 'weak_password' || msg.includes('password should be')) {
-    return { kind: 'error', text: 'Please choose a longer password — at least 8 characters.' };
+    return { kind: 'error', text: 'Please choose a longer password â€” at least 8 characters.' };
   }
   if (code === 'validation_failed' || msg.includes('unable to validate email')) {
     return { kind: 'error', text: "That doesn't look like a valid email address." };
@@ -98,7 +98,7 @@ function readLinkErrorFromUrl() {
 }
 
 const INPUT_CLASS =
-  'w-full bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 ' +
+  'w-full bg-card border border-white/8 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder:text-slate-500 ' +
   'focus:outline-none focus:border-gilt-gold/60 focus:ring-2 focus:ring-gilt-gold/25 transition';
 
 export default function AuthScreen() {
@@ -150,11 +150,11 @@ export default function AuthScreen() {
         } else if (isExistingUserSignup(data)) {
           setFeedback({
             kind: 'error',
-            text: 'An account with this email already exists — try signing in, or reset the password.',
+            text: 'An account with this email already exists â€” try signing in, or reset the password.',
           });
         } else if (data.session) {
           // Email confirmation is turned OFF in this project's Supabase
-          // settings, so signUp returned a live session — the store's
+          // settings, so signUp returned a live session â€” the store's
           // listener will route them straight into the app.
           toast.success('Welcome to Obsidian!');
         } else {
@@ -165,7 +165,7 @@ export default function AuthScreen() {
         }
       } else {
         // Forgot password. Note the deliberate lack of "no such user"
-        // feedback — confirming which emails have accounts is an
+        // feedback â€” confirming which emails have accounts is an
         // enumeration leak, so the response is identical either way.
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: `${window.location.origin}/reset-password`,
@@ -253,7 +253,7 @@ export default function AuthScreen() {
               disabled={googleLoading || loading}
               className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm mb-4 bg-white text-obsidian-950 font-medium hover:brightness-95 transition disabled:opacity-70"
             >
-              <GoogleMark /> {googleLoading ? 'Redirecting…' : 'Continue with Google'}
+              <GoogleMark /> {googleLoading ? 'Redirectingâ€¦' : 'Continue with Google'}
             </button>
 
             <div className="flex items-center gap-3 mb-4">
@@ -307,12 +307,12 @@ export default function AuthScreen() {
                 required
                 minLength={8}
                 // Tells password managers to offer a saved password on
-                // login and to generate/store a new one on signup —
+                // login and to generate/store a new one on signup â€”
                 // without these two values they frequently do neither.
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                 className={INPUT_CLASS}
               />
               {mode === 'signup' && <p className="text-xs text-slate-500 mt-1">At least 8 characters.</p>}
@@ -344,7 +344,7 @@ export default function AuthScreen() {
                       disabled={resending}
                       className="mt-1.5 underline underline-offset-2 hover:opacity-80 disabled:opacity-50"
                     >
-                      {resending ? 'Sending…' : 'Resend confirmation email'}
+                      {resending ? 'Sendingâ€¦' : 'Resend confirmation email'}
                     </button>
                   )}
                 </div>
@@ -357,7 +357,7 @@ export default function AuthScreen() {
             disabled={loading || googleLoading}
             className="gilt-btn rounded-xl py-2.5 text-sm mt-1 flex items-center justify-center gap-2 disabled:opacity-70"
           >
-            {loading ? 'Please wait…' : submitLabel}
+            {loading ? 'Please waitâ€¦' : submitLabel}
             {!loading && <ArrowRight size={15} />}
           </button>
         </form>

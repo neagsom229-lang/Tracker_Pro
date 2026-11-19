@@ -52,7 +52,7 @@ export default function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => handleClick(item)}
-                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left cursor-pointer
                   ${active ? 'text-slate-50' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
               >
                 {active && (

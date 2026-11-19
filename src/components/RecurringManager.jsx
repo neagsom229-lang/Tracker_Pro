@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Plus, Trash2, Repeat } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { CATEGORIES, getCategory } from '../utils/constants';
@@ -12,10 +12,10 @@ export default function RecurringManager() {
   const addRecurring = useStore((s) => s.addRecurring);
   const removeRecurring = useStore((s) => s.removeRecurring);
 
-  // Defaults to 'food' — matching TransactionModal's convention and,
+  // Defaults to 'food' â€” matching TransactionModal's convention and,
   // importantly, matching the FIRST expense option actually shown in
   // this form's own category dropdown. The previous default was
-  // 'rent', which is NOT the first visible option — meaning anyone who
+  // 'rent', which is NOT the first visible option â€” meaning anyone who
   // typed a description and amount without noticing the pre-selected
   // category (e.g. typing "Netflix" and submitting) got a rule
   // silently filed under Rent. Defaulting to whatever's already
@@ -46,7 +46,7 @@ export default function RecurringManager() {
         <Repeat size={16} className="text-gilt-gold" /> Recurring Transactions
       </h3>
       <p className="text-sm text-slate-500 mb-4">
-        Automatically posted on schedule — subscriptions, salary, rent, annual renewals.
+        Automatically posted on schedule â€” subscriptions, salary, rent, annual renewals.
       </p>
 
       <div className="flex flex-col divide-y divide-white/5 mb-5">
@@ -58,7 +58,7 @@ export default function RecurringManager() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-slate-200 truncate">{r.description}</p>
                 <p className="text-xs text-slate-500">
-                  {cat.label} · {FREQUENCY_LABEL[r.frequency] || 'every month'} · next {formatDate(r.nextRunDate)}
+                  {cat.label} Â· {FREQUENCY_LABEL[r.frequency] || 'every month'} Â· next {formatDate(r.nextRunDate)}
                 </p>
               </div>
               <span className={`text-sm font-medium ${r.amount > 0 ? 'text-income' : 'text-expense'}`}>
@@ -79,7 +79,7 @@ export default function RecurringManager() {
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             placeholder="e.g. Netflix"
-            className="flex-1 bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+            className="flex-1 bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
           />
           <input
             type="number"
@@ -87,7 +87,7 @@ export default function RecurringManager() {
             value={form.amount}
             onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
             placeholder="Amount"
-            className="w-28 bg-obsidian-800/60 border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+            className="w-28 bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
           />
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -96,7 +96,7 @@ export default function RecurringManager() {
             onChange={(e) =>
               setForm((f) => ({ ...f, direction: e.target.value, category: CATEGORIES.find((c) => c.type === e.target.value).id }))
             }
-            className="bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+            className="bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
           >
             <option value="expense">Expense</option>
             <option value="income">Income</option>
@@ -104,7 +104,7 @@ export default function RecurringManager() {
           <select
             value={form.category}
             onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-            className="flex-1 bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+            className="flex-1 bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
           >
             {CATEGORIES.filter((c) => c.type === form.direction).map((c) => (
               <option key={c.id} value={c.id}>
@@ -115,7 +115,7 @@ export default function RecurringManager() {
           <select
             value={form.frequency}
             onChange={(e) => setForm((f) => ({ ...f, frequency: e.target.value }))}
-            className="bg-obsidian-800/60 border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
+            className="bg-card border border-white/8 rounded-lg px-2.5 py-2 text-sm text-slate-200 focus:outline-none"
           >
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>

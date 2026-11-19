@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import { useStore } from '../store/useStore';
 import { formatMoney } from '../utils/format';
@@ -145,6 +145,10 @@ export default function TrendChart({ transactions = [], windowDays = 30, showFor
     };
   }, [transactions, windowDays, recurring, showForecast]);
 
+  const lastPoint = data[data.length - 1];
+  const [showTable, setShowTable] = useState(false);
+  const [focusPoint, setFocusPoint] = useState(null);
+
   if (!transactions || transactions.length === 0) {
     return (
       <div className="h-64 flex flex-col items-center justify-center gap-3 text-sm text-slate-500 text-center px-4">
@@ -156,7 +160,25 @@ export default function TrendChart({ transactions = [], windowDays = 30, showFor
 
   return (
     <>
-      <div className="h-64">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <button
+          type="button"
+          onClick={() => setShowTable((v) => !v)}
+          aria-expanded={showTable}
+          className="text-xs text-slate-300 hover:text-slate-100 hover:bg-white/5 rounded-lg px-3 py-1.5 flex items-center gap-1.5 cursor-pointer transition-colors"
+        >
+          {showTable ? 'Hide table' : 'View as table'}
+        </button>
+      </div>
+
+      <div
+        tabIndex={0}
+        role="img"
+        aria-label="Balance trend chart"
+        onFocus={() => setFocusPoint(data[data.length - 1])}
+        onBlur={() => setFocusPoint(null)}
+        className="h-64 cursor-pointer"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
             <defs>
@@ -204,6 +226,36 @@ export default function TrendChart({ transactions = [], windowDays = 30, showFor
           </AreaChart>
         </ResponsiveContainer>
       </div>
+
+      {lastPoint && (
+        <p role="status" className="text-xs text-slate-500 mt-2">
+          Balance trend: {formatMoney(lastPoint.isForecast ? lastPoint.forecast : lastPoint.balance, currency)}
+          {focusPoint
+            ? ` · focused ${focusPoint.label}: ${formatMoney(focusPoint.isForecast ? focusPoint.forecast : focusPoint.balance, currency)}`
+            : ''}
+        </p>
+      )}
+
+      {showTable && (
+        <table className="w-full text-sm mt-3 border-collapse">
+          <thead>
+            <tr className="text-xs text-slate-400 border-b border-white/5 pb-1">
+              <th className="text-left py-1 pr-3 font-normal">Date</th>
+              <th className="text-right w-32 py-1 tabular-nums font-normal">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...data].reverse().slice(0, 60).map((p) => (
+              <tr key={p.date} className="border-b border-white/5 last:border-b-0">
+                <td className="py-1 text-slate-200 pr-3 truncate">{p.label}</td>
+                <td className={`py-1 text-right tabular-nums ${p.isForecast ? 'text-gilt-purple' : 'text-slate-100'}`}>
+                  {formatMoney(p.isForecast ? p.forecast : p.balance, currency)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       {showForecast && !hasForecast && (
         <p className="text-xs text-slate-600 mt-2">

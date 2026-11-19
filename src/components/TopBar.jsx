@@ -33,7 +33,8 @@ export default function TopBar({ activeView }) {
         <button
           onClick={toggleTheme}
           aria-label="Toggle theme"
-          className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="p-2 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors cursor-pointer"
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>

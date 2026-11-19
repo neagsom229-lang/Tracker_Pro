@@ -29,7 +29,7 @@ const NetWorthPage = lazy(() => import('./components/NetWorthPage'));
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-obsidian-950">
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <motion.div
         animate={{ opacity: [0.4, 1, 0.4] }}
         transition={{ repeat: Infinity, duration: 1.4 }}
@@ -43,7 +43,7 @@ function LoadingScreen() {
 
 function DataErrorScreen({ message, onRetry }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-obsidian-950">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-background">
       <div className="glass-strong rounded-3xl p-8 max-w-sm text-center shadow-glass">
         <div className="w-12 h-12 rounded-2xl bg-expense-soft flex items-center justify-center mx-auto mb-5">
           <AlertCircle size={22} className="text-expense" />
@@ -97,7 +97,7 @@ function AppContent() {
   if (dataError) return <DataErrorScreen message={dataError} onRetry={initData} />;
 
   return (
-    <div className="min-h-screen flex bg-obsidian-950 text-slate-100">
+    <div className="min-h-screen flex bg-background text-slate-100">
       <Toaster
         position="top-right"
         toastOptions={{
