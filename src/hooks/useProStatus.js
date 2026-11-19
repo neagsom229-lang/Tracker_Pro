@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 
 // Any status in this list counts as "the user should see Pro features".
@@ -144,23 +145,42 @@ async function openChannelsFor(userId) {
     channelUserId = null;
   }
 
-  // Watch BOTH tables under a single channel name so we don't have
-  // multiple concurrent subscriptions. Any change to either table
-  // (subscription approved, manual payment created) triggers a fresh
-  // fetch that updates both fields.
-  channel = supabase
-    .channel(`user-status-${userId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${userId}` },
-      () => fetchAll()
-    )
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'manual_payments', filter: `user_id=eq.${userId}` },
-      () => fetchAll()
-    )
-    .subscribe();
+  let attempts = 0;
+  const maxAttempts = 3;
+  const backoffs = [1000, 5000, 30000];
+
+  const trySubscribe = () => {
+    channel = supabase
+      .channel(`user-status-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${userId}` },
+        () => fetchAll()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'manual_payments', filter: `user_id=eq.${userId}` },
+        () => fetchAll()
+      )
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('[realtime:proStatus]', status, err);
+          if (channel) {
+            supabase.removeChannel(channel);
+            channel = null;
+          }
+          attempts++;
+          if (attempts < maxAttempts) {
+            const delay = backoffs[attempts - 1] || 30000;
+            setTimeout(trySubscribe, delay);
+          } else {
+            toast.error('Live updates unavailable — refresh to retry.');
+          }
+        }
+      });
+  };
+
+  trySubscribe();
   channelUserId = userId;
 }
 

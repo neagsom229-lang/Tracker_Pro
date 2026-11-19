@@ -13,3 +13,10 @@ rsa_private_key.txt
 # is regenerated locally by `supabase link`, so there is no reason to
 # track it.
 supabase/.temp/
+
+# Generated/CI scratch
+coverage/
+audit.json
+
+# uipro-installed skill assets (re-installable via `uipro init`)
+.opencode/

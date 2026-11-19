@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutGrid, ArrowLeftRight, Target, Landmark, MoreHorizontal, PiggyBank, Repeat, Download, CreditCard } from 'lucide-react';
+import { LayoutGrid, ArrowLeftRight, Target, Landmark, MoreHorizontal, PiggyBank, Repeat, Download, CreditCard, Banknote } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
@@ -9,6 +9,7 @@ import { useEscapeKey } from '../hooks/useEscapeKey';
 const PRIMARY_ITEMS = [
   { id: 'dashboard', path: '/dashboard', label: 'Home', icon: LayoutGrid },
   { id: 'transactions', path: '/transactions', label: 'History', icon: ArrowLeftRight },
+  { id: 'networth', path: '/networth', label: 'Net', icon: Banknote },
   { id: 'goals', path: '/goals', label: 'Goals', icon: Target, pro: true },
   { id: 'debts', path: '/debts', label: 'Debts', icon: Landmark, pro: true },
 ];
@@ -50,10 +51,6 @@ export default function MobileNav() {
               className="md:hidden fixed inset-0 bg-obsidian-950/70 backdrop-blur-sm z-40"
             />
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', stiffness: 400, damping: 36 }}
               role="dialog"
               aria-label="More destinations"
               className="md:hidden fixed bottom-0 inset-x-0 z-50 glass-strong rounded-t-3xl border-t border-white/8 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
@@ -95,7 +92,7 @@ export default function MobileNav() {
               key={item.id}
               onClick={() => go(item)}
               aria-current={active ? 'page' : undefined}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-0 min-h-[44px] px-1 text-[10px] transition-colors ${
+              className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-0 min-h-[44px] px-1 text-[10px] transition-colors cursor-pointer ${
                 active ? 'text-slate-100' : 'text-slate-500'
               }`}
             >
@@ -109,7 +106,7 @@ export default function MobileNav() {
           onClick={() => setMoreOpen((v) => !v)}
           aria-expanded={moreOpen}
           aria-label="More destinations"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-0 min-h-[44px] px-1 text-[10px] transition-colors ${
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-0 min-h-[44px] px-1 text-[10px] transition-colors cursor-pointer ${
             moreActive || moreOpen ? 'text-slate-100' : 'text-slate-500'
           }`}
         >

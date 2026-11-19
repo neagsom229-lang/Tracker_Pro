@@ -7,7 +7,6 @@ import TrendChart from './TrendChart';
 import TransactionList from './TransactionList';
 import AIQuickAdd from './AIQuickAdd';
 import BudgetHealthCard from './BudgetHealthCard';
-import NetWorth from './NetWorth';
 
 export default function Dashboard() {
   const transactions = useStore((s) => s.transactions);
@@ -27,15 +26,12 @@ export default function Dashboard() {
       <AIQuickAdd />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Total Balance" value={totalBalance} currency={currency} icon={Wallet} tone="neutral" delay={0} />
-        <StatCard label="Total Income" value={totalIncome} currency={currency} icon={TrendingUp} tone="income" delay={0.05} />
-        <StatCard label="Total Expenses" value={totalExpenses} currency={currency} icon={TrendingDown} tone="expense" delay={0.1} />
+        <StatCard label="Total Balance" value={totalBalance} currency={currency} icon={Wallet} tone="neutral" />
+        <StatCard label="Total Income" value={totalIncome} currency={currency} icon={TrendingUp} tone="income" />
+        <StatCard label="Total Expenses" value={totalExpenses} currency={currency} icon={TrendingDown} tone="expense" />
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6">
-        <BudgetHealthCard />
-        <NetWorth />
-      </div>
+      <BudgetHealthCard />
 
       <div className="glass rounded-2xl p-5 shadow-glass">
         <h3 className="text-slate-100 font-medium mb-2">Balance Trend</h3>

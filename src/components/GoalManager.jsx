@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Target, Plus, Trash2, Check, CalendarClock, AlertTriangle } from 'lucide-react';
 import { useGoals } from '../hooks/useGoals';
 import { useStore } from '../store/useStore';
@@ -46,13 +46,7 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
   const barColor = goal.isComplete ? 'bg-income' : goal.isOverdue ? 'bg-expense' : 'bg-gilt-gradient';
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0 }}
-      className="rounded-xl border border-white/8 bg-obsidian-800/40 p-4"
-    >
+    <div className="rounded-xl border border-white/8 bg-obsidian-800/40 p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -74,7 +68,7 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
         <button
           onClick={() => onRemove(goal.id)}
           aria-label={`Delete goal ${goal.name}`}
-          className="text-slate-600 hover:text-expense transition-colors p-1 shrink-0"
+          className="text-slate-600 hover:text-expense transition-colors cursor-pointer p-1 shrink-0"
         >
           <Trash2 size={14} />
         </button>
@@ -128,7 +122,7 @@ function GoalRow({ goal, currency, onContribute, onRemove }) {
       )}
 
       {error && <p className="text-xs text-expense mt-1.5">{error}</p>}
-    </motion.div>
+    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Wand2, Loader2, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
@@ -147,14 +147,14 @@ export default function AIQuickAdd() {
           <button
             type="submit"
             disabled={!text.trim()}
-            className="gilt-btn rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            className="gilt-btn rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50 cursor-pointer"
           >
             Parse
           </button>
         </form>
       ) : (
         <AnimatePresence mode="wait">
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="p-4">
+          <div className="p-4">
             {aiLoading && (
               <p className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
                 <Loader2 size={11} className="animate-spin" /> Improving this guess…
@@ -233,19 +233,19 @@ export default function AIQuickAdd() {
               <button
                 onClick={handleConfirm}
                 disabled={submitting || aiLoading}
-                className="flex-1 gilt-btn rounded-lg py-2 text-sm flex items-center justify-center gap-1.5 disabled:opacity-60"
+                className="flex-1 gilt-btn rounded-lg py-2 text-sm flex items-center justify-center gap-1.5 disabled:opacity-60 cursor-pointer"
               >
                 <Check size={14} /> {submitting ? 'Adding…' : 'Confirm'}
               </button>
               <button
                 onClick={handleCancel}
                 disabled={submitting}
-                className="rounded-lg px-3 py-2 text-sm border border-white/10 text-slate-400 hover:text-slate-200 flex items-center gap-1.5"
+                className="rounded-lg px-3 py-2 text-sm border border-white/10 text-slate-400 hover:text-slate-200 flex items-center gap-1.5 cursor-pointer"
               >
                 <X size={14} /> Cancel
               </button>
             </div>
-          </motion.div>
+          </div>
         </AnimatePresence>
       )}
     </div>

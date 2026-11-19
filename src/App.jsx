@@ -25,6 +25,7 @@ const DebtManager = lazy(() => import('./components/DebtManager'));
 const ExportPanel = lazy(() => import('./components/ExportPanel'));
 const BillingPanel = lazy(() => import('./components/BillingPanel'));
 const AdminPaymentsPanel = lazy(() => import('./components/AdminPaymentsPanel'));
+const NetWorthPage = lazy(() => import('./components/NetWorthPage'));
 
 function LoadingScreen() {
   return (
@@ -130,6 +131,7 @@ function AppContent() {
                   <Route path="/export" element={<ExportPanel />} />
                   <Route path="/billing" element={<BillingPanel />} />
                   <Route path="/admin" element={<AdminPaymentsPanel />} />
+                  <Route path="/networth" element={<NetWorthPage />} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </motion.div>
@@ -148,7 +150,7 @@ function AppContent() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AppContent />
     </BrowserRouter>
   );

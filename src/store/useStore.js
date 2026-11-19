@@ -59,6 +59,9 @@ export const useStore = create((set, get) => ({
 
     // 1. Check for an existing session on first load (e.g. page refresh).
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
       set({ session: session?.user ?? null, authLoading: false });
       if (session?.user) initDataOnce();
     });
@@ -72,6 +75,11 @@ export const useStore = create((set, get) => ({
 
       const user = session?.user ?? null;
       const wasLoggedOut = !get().session;
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      } else if (!user) {
+        supabase.realtime.setAuth(null);
+      }
       set({ session: user, authLoading: false });
       if (user && wasLoggedOut) initDataOnce();
       if (!user) {

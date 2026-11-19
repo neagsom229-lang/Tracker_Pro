@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Search, Pencil, Trash2, SlidersHorizontal } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { CATEGORIES, getCategory } from '../utils/constants';
@@ -111,14 +111,7 @@ export default function TransactionList({ limit }) {
             const cat = getCategory(t.category);
             const isIncome = t.amount > 0;
             return (
-              <motion.div
-                key={t.id}
-                layout
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, height: 0 }}
-                className="flex items-center gap-3 py-3 group"
-              >
+              <div key={t.id} className="flex items-center gap-3 py-3 group">
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
                   style={{ backgroundColor: `${cat.color}22`, color: cat.color }}
@@ -135,23 +128,23 @@ export default function TransactionList({ limit }) {
                   {isIncome ? '+' : '-'}
                   {formatMoney(Math.abs(t.amount), currency)}
                 </span>
-                <div className="hidden group-hover:flex items-center gap-1">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => openTransactionModal(t.id)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-white/5 cursor-pointer"
                     aria-label="Edit transaction"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={() => deleteTransaction(t.id)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-expense hover:bg-expense-soft"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-expense hover:bg-expense-soft cursor-pointer"
                     aria-label="Delete transaction"
                   >
                     <Trash2 size={14} />
                   </button>
                 </div>
-              </motion.div>
+              </div>
             );
           })}
         </AnimatePresence>

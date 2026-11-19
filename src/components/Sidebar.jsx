@@ -1,5 +1,4 @@
-import { motion } from 'framer-motion';
-import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Target, Landmark, Download, LogOut, Gem, CreditCard, ShieldCheck } from 'lucide-react';
+import { LayoutGrid, ArrowLeftRight, PiggyBank, Repeat, Target, Landmark, Download, LogOut, Gem, CreditCard, ShieldCheck, Banknote } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
@@ -13,6 +12,7 @@ export const NAV_ITEMS = [
   { id: 'debts', path: '/debts', label: 'Debts', icon: Landmark, pro: true },
   { id: 'export', path: '/export', label: 'Export Data', icon: Download, pro: true },
   { id: 'billing', path: '/billing', label: 'Billing', icon: CreditCard },
+  { id: 'networth', path: '/networth', label: 'Net Worth', icon: Banknote },
 ];
 
 export default function Sidebar() {
@@ -56,11 +56,7 @@ export default function Sidebar() {
                   ${active ? 'text-slate-50' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
               >
                 {active && (
-                  <motion.div
-                    layoutId="sidebar-active"
-                    className="absolute inset-0 bg-white/8 rounded-xl border border-white/10"
-                    transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                  />
+                  <span className="absolute inset-0 bg-white/8 rounded-xl border border-white/10" />
                 )}
                 <item.icon size={18} className="relative z-10" strokeWidth={2} />
                 <span className="relative z-10 flex-1">{item.label}</span>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Landmark, Plus, Trash2, TrendingDown, PartyPopper } from 'lucide-react';
 import { useStore, selectDebtTotals } from '../store/useStore';
 import { formatMoney } from '../utils/format';
@@ -69,13 +69,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
   };
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0 }}
-      className="rounded-xl border border-white/8 bg-obsidian-800/40 p-4"
-    >
+    <div className="rounded-xl border border-white/8 bg-obsidian-800/40 p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -90,7 +84,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
         <button
           onClick={() => onRemove(debt.id)}
           aria-label={`Delete debt ${debt.name}`}
-          className="text-slate-600 hover:text-expense transition-colors p-1 shrink-0"
+          className="text-slate-600 hover:text-expense transition-colors cursor-pointer p-1 shrink-0"
         >
           <Trash2 size={14} />
         </button>
@@ -161,7 +155,7 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
       )}
 
       {error && <p className="text-xs text-expense mt-1.5">{error}</p>}
-    </motion.div>
+    </div>
   );
 }
 

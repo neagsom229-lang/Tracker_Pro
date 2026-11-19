@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { toast } from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
 import { useStore, selectUnreadCount } from '../store/useStore';
 
@@ -41,27 +42,58 @@ export function useNotifications() {
   useEffect(() => {
     if (!userId) return;
 
-    const channel = supabase
-      .channel(`notifications-${userId}-${instanceId.current}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-        (payload) => {
-          const row = payload.new;
-          receiveNotification({
-            id: row.id,
-            title: row.title,
-            message: row.message,
-            type: row.type,
-            read: row.read,
-            createdAt: row.created_at,
-          });
-        }
-      )
-      .subscribe();
+    let attempts = 0;
+    const maxAttempts = 3;
+    const backoffs = [1000, 5000, 30000];
+    let currentChannel = null;
+    let isMounted = true;
+    let timeoutId = null;
+
+    const subscribeChannel = () => {
+      if (!isMounted) return;
+
+      currentChannel = supabase
+        .channel(`notifications-${userId}-${instanceId.current}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+          (payload) => {
+            const row = payload.new;
+            receiveNotification({
+              id: row.id,
+              title: row.title,
+              message: row.message,
+              type: row.type,
+              read: row.read,
+              createdAt: row.created_at,
+            });
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.error('[realtime:notifications]', status, err);
+            if (currentChannel) {
+              supabase.removeChannel(currentChannel);
+            }
+            attempts++;
+            if (attempts < maxAttempts && isMounted) {
+              const delay = backoffs[attempts - 1] || 30000;
+              timeoutId = setTimeout(subscribeChannel, delay);
+            } else if (attempts >= maxAttempts && isMounted) {
+              toast.error('Live updates unavailable — refresh to retry.');
+            }
+          }
+        });
+    };
+
+    subscribeChannel();
 
     return () => {
-      supabase.removeChannel(channel);
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (currentChannel) {
+        supabase.removeChannel(currentChannel);
+      }
     };
   }, [userId, receiveNotification]);
 
