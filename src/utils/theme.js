@@ -2,6 +2,7 @@
 export function applyTheme(theme) {
   if (typeof document === 'undefined') return;
   document.documentElement.classList.toggle('dark', theme === 'dark');
+  document.documentElement.classList.toggle('light', theme === 'light');
   if (typeof localStorage !== 'undefined') localStorage.setItem('theme', theme);
 }
 

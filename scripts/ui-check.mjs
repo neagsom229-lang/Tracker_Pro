@@ -34,9 +34,20 @@ async function waitServer() {
   throw new Error('UI server did not come up at ' + BASE);
 }
 
+async function bypassSW(page) {
+  await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.evaluate(async () => {
+    const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
+    await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
+    const keys = (await caches?.keys?.()) ?? [];
+    await Promise.all(keys.map((k) => caches.delete(k).catch(() => {})));
+  });
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+}
+
 async function login(page) {
   const email = `check-${Date.now()}@example.com`;
-  await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await bypassSW(page);
   await page.locator('input#auth-email').waitFor({ state: 'visible', timeout: 20000 });
   await page.fill('input#auth-email', email);
   await page.fill('input#auth-password', 'Sup3r-Secret-Pass!');

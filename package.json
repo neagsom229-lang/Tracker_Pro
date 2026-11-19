@@ -10,6 +10,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "ui:check": "node scripts/ui-check.mjs",
+    "theme:check": "node scripts/theme-check.mjs",
     "keyboard:check": "node scripts/keyboard-check.mjs",
     "smoke": "node scripts/smoke.mjs",
     "coverage": "vitest run --coverage"

@@ -33,6 +33,11 @@ const expect = (cond, label) => {
 };
 
 await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30000 });
+await page.evaluate(async () => {
+  const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
+  await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
+});
+await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.locator('input#auth-email').waitFor({ state: 'visible', timeout: 15000 });
 expect((await page.locator('input#auth-email').count()) > 0, 'auth screen renders');
 
