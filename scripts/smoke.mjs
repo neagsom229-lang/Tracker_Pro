@@ -18,7 +18,6 @@
 import { chromium } from 'playwright';
 
 const BASE = 'http://localhost:4173';
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
