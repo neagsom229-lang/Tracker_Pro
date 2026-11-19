@@ -134,11 +134,13 @@ export default function CategoryChart({ spendingMap, transactions = [] }) {
         {summary && (
           <p role="status" className="text-xs text-slate-500 truncate" title={summary}>
             {summary}
+            {focused ? ` · focused: ${focused.name} ${formatMoney(Math.abs(focused.value), currency)}` : ''}
           </p>
         )}
       </div>
 
       <div
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={0}
         role="img"
         aria-label="Spending by category chart"
@@ -173,7 +175,7 @@ export default function CategoryChart({ spendingMap, transactions = [] }) {
       </div>
 
       {/* Visible labels — never color alone. */}
-      <ul className="flex flex-wrap gap-x-4 gap-y-1" role="list" aria-label="Category amounts">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Category amounts">
         {data.map((d) => (
           <li key={d.id} className="flex items-center gap-1.5 text-xs text-slate-300">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />

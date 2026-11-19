@@ -1,5 +1,5 @@
 ﻿import { useMemo, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Search, Pencil, Trash2, SlidersHorizontal } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { CATEGORIES, getCategory } from '../utils/constants';

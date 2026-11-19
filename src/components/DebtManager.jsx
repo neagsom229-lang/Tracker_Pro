@@ -1,5 +1,5 @@
 ﻿import { useMemo, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Landmark, Plus, Trash2, TrendingDown, PartyPopper } from 'lucide-react';
 import { useStore, selectDebtTotals } from '../store/useStore';
 import { formatMoney } from '../utils/format';

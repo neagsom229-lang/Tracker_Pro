@@ -7,7 +7,7 @@ import globals from 'globals';
 export default [
   js.configs.recommended,
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['**/*.{js,jsx,mjs}'],
     plugins: {
       react,
       'react-hooks': reactHooks,
@@ -41,6 +41,6 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'supabase/functions/**', 'coverage/**'],
+    ignores: ['dist/**', 'node_modules/**', 'supabase/functions/**', 'coverage/**', '.opencode/**'],
   },
 ];

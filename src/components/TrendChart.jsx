@@ -172,6 +172,7 @@ export default function TrendChart({ transactions = [], windowDays = 30, showFor
       </div>
 
       <div
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
         tabIndex={0}
         role="img"
         aria-label="Balance trend chart"

@@ -8,7 +8,7 @@ export function applyTheme(theme) {
 export function initTheme() {
   const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null;
   const prefersLight =
-    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches;
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: light)').matches;
   const theme = stored || (prefersLight ? 'light' : 'dark');
   applyTheme(theme);
   return theme;

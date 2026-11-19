@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Target, Plus, Trash2, Check, CalendarClock, AlertTriangle } from 'lucide-react';
 import { useGoals } from '../hooks/useGoals';
 import { useStore } from '../store/useStore';
