@@ -21,4 +21,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true, // needed for OAuth redirect (Google) to work
   },
+  realtime: {
+    // supabase-js reconnects on its own; this just makes the backoff
+    // faster at first and capped afterwards. The manual retry code that
+    // used to race the library is gone.
+    reconnectAfterMs: (tries) => [1000, 2000, 5000, 10000, 20000][tries - 1] ?? 30000,
+    heartbeatIntervalMs: 25000,
+  },
 });

@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
+import { createRealtimeFallback } from '../lib/realtimeFallback';
+
+// ============================================================================
+// REQUIREMENT (deliberately "less dumb"):
+//   "Pro status and notifications are always correct" — NOT
+//   "the WebSocket always connects".
+// Realtime is a convenience, not a dependency. When the socket is blocked
+// (ISP, VPN, ad-blocker, flaky data) the app must stay correct and quiet:
+// no wiped Pro status, no toast spam, no channel churn. The fallback in
+// src/lib/realtimeFallback.js keeps data correct by polling, and recovers
+// automatically when the socket returns.
+// ============================================================================
 
 // Any status in this list counts as "the user should see Pro features".
 // 'trialing' is included so a free-trial subscription unlocks Pro too.
@@ -39,6 +50,15 @@ const ACTIVE_STATUSES = ['active', 'trialing'];
  * useEffect would race. Instead: one channel per tab, keyed by user id,
  * with component mount/unmount only adding/removing a state listener.
  * This survives React 18 StrictMode's mount/unmount/mount dance cleanly.
+ *
+ * FAILURE SEMANTICS:
+ * A network blip must never look like a real state change. So:
+ *  - the user is read from getSession() (local, cached) instead of
+ *    getUser() (a network call that can transiently return user:null);
+ *  - a failed query keeps the previous subscription/pendingPayment;
+ *  - only a successful response — including a confirmed "no row" — may
+ *    change those fields;
+ *  - a fetch sequence number discards stale in-flight responses.
  */
 
 // ---- module-level singleton state, shared by every hook instance ----
@@ -49,8 +69,12 @@ let state = {
 };
 const listeners = new Set();
 let channel = null;
+let realtimeFallback = null;
 let channelUserId = null;
 let initPromise = null;
+let channelOpenChain = Promise.resolve();
+let fetchSeq = 0;
+let queryFailureWarned = false;
 
 function notify() {
   for (const listener of listeners) listener(state);
@@ -62,11 +86,23 @@ function setState(patch) {
 }
 
 async function fetchAll() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const seq = ++fetchSeq;
+
+  // Local, cached session. getUser() would be a network call that can
+  // transiently resolve to null during a blip and wipe Pro status.
+  let user = null;
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    user = session?.user ?? null;
+  } catch {
+    // getSession is local, but if it ever fails: keep previous state.
+    return { subscription: state.subscription, pendingPayment: state.pendingPayment };
+  }
 
   if (!user) {
+    if (seq !== fetchSeq) return { subscription: state.subscription, pendingPayment: state.pendingPayment };
     setState({ subscription: null, pendingPayment: null, loading: false });
     return { subscription: null, pendingPayment: null };
   }
@@ -92,18 +128,36 @@ async function fetchAll() {
       .maybeSingle(),
   ]);
 
-  if (subsResult.error) {
-    console.error('useProStatus: subscriptions fetch failed', subsResult.error.message);
-  }
-  if (pendingResult.error) {
-    // Table might not exist yet on older deploys — degrade gracefully.
-    if (pendingResult.error.code !== '42P01') {
-      console.error('useProStatus: manual_payments fetch failed', pendingResult.error.message);
-    }
+  // A newer fetch started while this one was in flight — its result is
+  // stale and must not overwrite the newer one.
+  if (seq !== fetchSeq) {
+    return { subscription: state.subscription, pendingPayment: state.pendingPayment };
   }
 
-  const subscription = subsResult.data ?? null;
-  const pendingPayment = pendingResult.data ?? null;
+  // Only successful responses change state. A failed query keeps the
+  // previous value so a blip cannot look like "Pro revoked".
+  const subscription = subsResult.error ? state.subscription : subsResult.data ?? null;
+
+  let pendingPayment = state.pendingPayment;
+  if (pendingResult.error) {
+    // 42P01 = relation does not exist (older deploy): that's a confirmed
+    // "no pending payment", not an outage.
+    if (pendingResult.error.code === '42P01') pendingPayment = null;
+  } else {
+    pendingPayment = pendingResult.data ?? null;
+  }
+
+  const hadError =
+    !!subsResult.error || (!!pendingResult.error && pendingResult.error.code !== '42P01');
+  if (hadError) {
+    if (!queryFailureWarned) {
+      queryFailureWarned = true;
+      const first = subsResult.error || pendingResult.error;
+      console.warn('useProStatus: status fetch failed — keeping last known status', first?.message);
+    }
+  } else {
+    queryFailureWarned = false;
+  }
 
   setState({ subscription, pendingPayment, loading: false });
   return { subscription, pendingPayment };
@@ -133,55 +187,74 @@ export async function refreshUntilPro({ attempts = 6, delayMs = 1500 } = {}) {
   return false;
 }
 
-// (Re)points the shared channel(s) at `userId`. Always removes any
-// existing channel first and awaits removal before opening new ones, so
-// there's never a moment where two channels for the same topic exist.
-async function openChannelsFor(userId) {
-  if (channel && channelUserId === userId) return; // already correct
-
+/**
+ * teardownChannel()
+ * -----------------
+ * Stops the realtime fallback FIRST (so a late CLOSED/CHANNEL_ERROR event
+ * from the removal is ignored and cannot start polling), then removes the
+ * channel. Safe to call when there is nothing to tear down.
+ */
+async function teardownChannel() {
+  if (realtimeFallback) {
+    realtimeFallback.stop();
+    realtimeFallback = null;
+  }
   if (channel) {
-    await supabase.removeChannel(channel);
+    const existing = channel;
     channel = null;
     channelUserId = null;
+    await supabase.removeChannel(existing);
   }
+}
 
-  let attempts = 0;
-  const maxAttempts = 3;
-  const backoffs = [1000, 5000, 30000];
+/**
+ * openChannelsFor(userId)
+ * -----------------------
+ * (Re)points the shared channel at `userId`.
+ *
+ * Serialized through a promise chain: two concurrent callers can never both
+ * create a channel, even if the first is still awaiting teardown. The
+ * per-user guard inside makes duplicate sequential calls a no-op.
+ */
+function openChannelsFor(userId) {
+  const run = async () => {
+    if (channel && channelUserId === userId) return; // already correct
 
-  const trySubscribe = () => {
-    channel = supabase
-      .channel(`user-status-${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${userId}` },
-        () => fetchAll()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'manual_payments', filter: `user_id=eq.${userId}` },
-        () => fetchAll()
-      )
-      .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error('[realtime:proStatus]', status, err);
-          if (channel) {
-            supabase.removeChannel(channel);
-            channel = null;
-          }
-          attempts++;
-          if (attempts < maxAttempts) {
-            const delay = backoffs[attempts - 1] || 30000;
-            setTimeout(trySubscribe, delay);
-          } else {
-            toast.error('Live updates unavailable — refresh to retry.');
-          }
-        }
+    try {
+      if (channel) await teardownChannel();
+
+      const fallback = createRealtimeFallback({
+        label: 'proStatus',
+        refetch: fetchAll,
+        intervalMs: 20000,
       });
+
+      const newChannel = supabase
+        .channel(`user-status-${userId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${userId}` },
+          () => fetchAll()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'manual_payments', filter: `user_id=eq.${userId}` },
+          () => fetchAll()
+        );
+
+      channel = newChannel;
+      channelUserId = userId;
+      realtimeFallback = fallback;
+      newChannel.subscribe(fallback.onStatus);
+    } catch (err) {
+      console.warn('useProStatus: failed to open realtime channel', err?.message);
+    }
   };
 
-  trySubscribe();
-  channelUserId = userId;
+  // Run even if a previous link rejected, so one failure cannot wedge the
+  // chain forever.
+  channelOpenChain = channelOpenChain.then(run, run);
+  return channelOpenChain;
 }
 
 // Runs the initial fetch + opens Realtime channels exactly once for the
@@ -194,27 +267,25 @@ function ensureStarted() {
   initPromise = (async () => {
     await fetchAll();
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
     await openChannelsFor(user.id);
   })();
 
+  // Never let a rejected init promise be an unhandled rejection; later
+  // calls can still retry because initPromise stays set.
+  initPromise.catch(() => {});
+
   return initPromise;
 }
 
-// Keep things correct across sign-out and sign-in (including switching
-// accounts in the same tab) — re-point the channel at the new user, or
-// tear it down on sign-out, rather than leaving it subscribed to the
-// previous user's rows.
-supabase.auth.onAuthStateChange(async (event, session) => {
+async function handleAuthChange(event, session) {
   if (event === 'SIGNED_OUT') {
-    if (channel) {
-      await supabase.removeChannel(channel);
-      channel = null;
-      channelUserId = null;
-    }
+    await teardownChannel();
     initPromise = null;
+    fetchSeq++; // invalidate any in-flight fetch
     setState({ subscription: null, pendingPayment: null, loading: false });
     return;
   }
@@ -222,11 +293,26 @@ supabase.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_IN' && session?.user) {
     // Only reopen if we're not already watching this user.
     if (session.user.id !== channelUserId) {
-      initPromise = null;      // reset so ensureStarted runs again
+      initPromise = null; // reset so ensureStarted runs again
+      fetchSeq++; // invalidate any in-flight fetch
       await fetchAll();
       await openChannelsFor(session.user.id);
     }
   }
+}
+
+// Keep things correct across sign-out and sign-in (including switching
+// accounts in the same tab) — re-point the channel at the new user, or
+// tear it down on sign-out, rather than leaving it subscribed to the
+// previous user's rows.
+//
+// The work is deferred with setTimeout(..., 0): awaiting other Supabase
+// calls directly inside an onAuthStateChange callback can deadlock the
+// auth client (it re-enters the same internal lock).
+supabase.auth.onAuthStateChange((event, session) => {
+  setTimeout(() => {
+    handleAuthChange(event, session).catch(() => {});
+  }, 0);
 });
 
 export function useProStatus() {

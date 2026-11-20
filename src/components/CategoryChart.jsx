@@ -36,11 +36,8 @@ export default function CategoryChart({ spendingMap, transactions = [] }) {
   const [showTable, setShowTable] = useState(false);
   const [focused, setFocused] = useState(null);
 
-  const total = data.reduce((s, d) => s + Math.abs(d.value), 0);
-  const summary = data.length
-    ? `Spending by category: ${data[0].name} ${formatMoney(Math.abs(data[0].value), currency)} (${Math.round((Math.abs(data[0].value) / total) * 100)}% of spending)`
-    : '';
-
+  // Derived values are all declared before the first use and before any
+  // early return. (Reading `data` above its useMemo was a TDZ crash.)
   const entries = Object.entries(spendingMap);
 
   const data = useMemo(
@@ -55,6 +52,11 @@ export default function CategoryChart({ spendingMap, transactions = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [spendingMap]
   );
+
+  const total = data.reduce((s, d) => s + Math.abs(d.value), 0);
+  const summary = data.length
+    ? `Spending by category: ${data[0].name} ${formatMoney(Math.abs(data[0].value), currency)} (${Math.round((Math.abs(data[0].value) / total) * 100)}% of spending)`
+    : '';
 
   const drilldownRows = useMemo(() => {
     if (!drilldown) return [];

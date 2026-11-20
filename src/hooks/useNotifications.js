@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { toast } from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
+import { dataProvider } from '../lib/dataProvider';
+import { createRealtimeFallback } from '../lib/realtimeFallback';
 import { useStore, selectUnreadCount } from '../store/useStore';
 
 /**
@@ -9,6 +10,11 @@ import { useStore, selectUnreadCount } from '../store/useStore';
  * Keeps the bell live. The initial list is loaded once by `initData`;
  * this hook's only job is to subscribe to INSERTs on `notifications` so a
  * row written by the daily-digest Edge Function appears without a refresh.
+ *
+ * When Realtime is unavailable the fallback polls
+ * `dataProvider.getNotifications(userId)` (oldest-first into
+ * receiveNotification, which de-dupes by id) so a notification still shows
+ * up within a minute — silently, with no toast spam.
  *
  * WHY THE CHANNEL NAME HAS AN INSTANCE SUFFIX
  * -------------------------------------------
@@ -42,55 +48,46 @@ export function useNotifications() {
   useEffect(() => {
     if (!userId) return;
 
-    let attempts = 0;
-    const maxAttempts = 3;
-    const backoffs = [1000, 5000, 30000];
     let currentChannel = null;
-    let isMounted = true;
-    let timeoutId = null;
 
-    const subscribeChannel = () => {
-      if (!isMounted) return;
+    const fallback = createRealtimeFallback({
+      label: 'notifications',
+      intervalMs: 60000,
+      refetch: async () => {
+        const rows = await dataProvider.getNotifications(userId);
+        // Oldest-first: receiveNotification prepends each row, so feeding
+        // oldest → newest leaves the list in its intended newest-first
+        // order. De-dup by id makes repeats harmless.
+        for (let i = rows.length - 1; i >= 0; i--) {
+          receiveNotification(rows[i]);
+        }
+      },
+    });
 
-      currentChannel = supabase
-        .channel(`notifications-${userId}-${instanceId.current}`)
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
-          (payload) => {
-            const row = payload.new;
-            receiveNotification({
-              id: row.id,
-              title: row.title,
-              message: row.message,
-              type: row.type,
-              read: row.read,
-              createdAt: row.created_at,
-            });
-          }
-        )
-        .subscribe((status, err) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.error('[realtime:notifications]', status, err);
-            if (currentChannel) {
-              supabase.removeChannel(currentChannel);
-            }
-            attempts++;
-            if (attempts < maxAttempts && isMounted) {
-              const delay = backoffs[attempts - 1] || 30000;
-              timeoutId = setTimeout(subscribeChannel, delay);
-            } else if (attempts >= maxAttempts && isMounted) {
-              toast.error('Live updates unavailable — refresh to retry.');
-            }
-          }
-        });
-    };
-
-    subscribeChannel();
+    currentChannel = supabase
+      .channel(`notifications-${userId}-${instanceId.current}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const row = payload.new;
+          receiveNotification({
+            id: row.id,
+            title: row.title,
+            message: row.message,
+            type: row.type,
+            read: row.read,
+            createdAt: row.created_at,
+          });
+        }
+      )
+      .subscribe(fallback.onStatus);
 
     return () => {
-      isMounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      // Stop the fallback before removing the channel: the removal can
+      // emit CLOSED, and a stopped fallback must ignore it rather than
+      // start polling during teardown.
+      fallback.stop();
       if (currentChannel) {
         supabase.removeChannel(currentChannel);
       }

@@ -38,6 +38,7 @@ export default [
       ...jsxA11y.configs.recommended.rules,
       'react/prop-types': 'off',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-use-before-define': ['error', { functions: false, classes: true, variables: true }],
     },
   },
   {
