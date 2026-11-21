@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import { dataProvider } from '../lib/dataProvider';
 import { createRealtimeFallback } from '../lib/realtimeFallback';
 import { useStore, selectUnreadCount } from '../store/useStore';
+import { api, isLocalBackend } from '../api/client';
 
 /**
  * useNotifications()
@@ -47,6 +48,18 @@ export function useNotifications() {
 
   useEffect(() => {
     if (!userId) return;
+
+    if (isLocalBackend()) {
+      // Local mode: poll GET /api/notifications every 60s (api rows are
+      // already in the store shape; receiveNotification de-dupes by id).
+      const refetch = async () => {
+        const rows = await api.notifications.get();
+        for (let i = rows.length - 1; i >= 0; i--) receiveNotification(rows[i]);
+      };
+      void refetch();
+      const timerId = setInterval(refetch, 60000);
+      return () => clearInterval(timerId);
+    }
 
     let currentChannel = null;
 

@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Gem, ArrowRight, MailCheck, AlertCircle, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabaseClient';
+import { api, isLocalBackend } from '../api/client';
+import { useStore } from '../store/useStore';
 
 // Simple inline Google "G" mark so we don't pull in a whole icon pack
 // just for one brand logo.
@@ -109,6 +111,7 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const isLocal = isLocalBackend();
 
   // `feedback` is a single { kind, text } object rather than three
   // separate booleans, so only one message can ever be on screen at once
@@ -119,6 +122,11 @@ export default function AuthScreen() {
   });
 
   const switchMode = (next) => {
+    // Local mode has no password-reset endpoint yet — redirect to login.
+    if (next === 'forgot' && isLocal) {
+      setFeedback({ kind: 'error', text: 'Password reset is not available in local mode yet.' });
+      return;
+    }
     setMode(next);
     setFeedback(null);
     if (next !== 'login') setPassword('');
@@ -134,6 +142,25 @@ export default function AuthScreen() {
     setFeedback(null);
 
     try {
+      // Local mode: Express API (httpOnly cookie; session loads via
+      // initAuth → GET /api/auth/me).
+      if (isLocal) {
+        if (mode === 'login') {
+          const { ok } = await api.auth.login({ email: cleanEmail, password });
+          if (!ok) setFeedback({ kind: 'error', text: "That email and password don't match an account." });
+          else useStore.getState().initAuth();
+        } else {
+          const displayName = cleanEmail.split('@')[0];
+          const { ok } = await api.auth.register({ email: cleanEmail, password, displayName });
+          if (!ok) setFeedback({ kind: 'error', text: 'An account with this email already exists — try signing in.' });
+          else {
+            toast.success('Welcome to Obsidian!');
+            useStore.getState().initAuth();
+          }
+        }
+        return;
+      }
+
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
         if (error) setFeedback(translateAuthError(error));
@@ -201,6 +228,7 @@ export default function AuthScreen() {
   };
 
   const handleGoogle = async () => {
+    if (isLocal) return; // Google OAuth is a Supabase-specific flow
     setGoogleLoading(true);
     setFeedback(null);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -246,7 +274,7 @@ export default function AuthScreen() {
         <h1 className="text-2xl font-semibold text-slate-50 mb-1">{heading}</h1>
         <p className="text-sm text-slate-400 mb-6">{subheading}</p>
 
-        {mode !== 'forgot' && (
+        {!isLocal && mode !== 'forgot' && (
           <>
             <button
               onClick={handleGoogle}
@@ -290,7 +318,7 @@ export default function AuthScreen() {
                 <label htmlFor="auth-password" className="text-xs text-slate-400">
                   Password
                 </label>
-                {mode === 'login' && (
+                {mode === 'login' && !isLocal && (
                   <button
                     type="button"
                     onClick={() => switchMode('forgot')}

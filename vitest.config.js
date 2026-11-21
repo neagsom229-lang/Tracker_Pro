@@ -29,5 +29,6 @@ export default defineConfig({
         functions: 35,
       },
     },
+    setup: ['server/setup-database-guard.js'],
   },
 });

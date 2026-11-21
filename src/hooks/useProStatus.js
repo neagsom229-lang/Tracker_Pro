@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { createRealtimeFallback } from '../lib/realtimeFallback';
+import { api, isLocalBackend } from '../api/client';
 
 // ============================================================================
 // REQUIREMENT (deliberately "less dumb"):
@@ -87,6 +88,25 @@ function setState(patch) {
 
 async function fetchAll() {
   const seq = ++fetchSeq;
+
+  if (isLocalBackend()) {
+    // Local mode: Pro is the users.is_pro dev toggle in tracker_db (read
+    // via GET /api/profile through the Vite proxy).
+    try {
+      const data = await api.profile.get();
+      if (seq !== fetchSeq) return { subscription: state.subscription, pendingPayment: state.pendingPayment };
+      const subscription = data?.isPro
+        ? { id: 'local-is-pro', user_id: data.id, status: 'active', plan_name: 'Local dev (users.is_pro)', payment_provider: 'local' }
+        : null;
+      setState({ subscription, pendingPayment: null, loading: false });
+      return { subscription, pendingPayment: null };
+    } catch {
+      // Keep the last known status on error.
+      return { subscription: state.subscription, pendingPayment: state.pendingPayment };
+    }
+  }
+
+  // Normal Supabase path:
 
   // Local, cached session. getUser() would be a network call that can
   // transiently resolve to null during a blip and wipe Pro status.
@@ -266,6 +286,7 @@ function ensureStarted() {
 
   initPromise = (async () => {
     await fetchAll();
+    if (isLocalBackend()) return;
     const {
       data: { session },
     } = await supabase.auth.getSession();
