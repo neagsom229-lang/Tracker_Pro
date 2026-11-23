@@ -55,6 +55,67 @@ Integration tests require PostgreSQL with a `tracker_db_test` database. They nev
 
 ---
 
+## Local mode (PostgreSQL)
+
+In local mode the tracker runs against **local PostgreSQL databases** (`tracker_db` for dev, `tracker_db_test` for integration tests). No Supabase, no Stripe, no external services are required.
+
+### Prerequisites
+
+1. **Install PostgreSQL** and ensure `psql` is on your `PATH`.
+2. **Create a database role**:
+
+   ```bash
+   createuser -s -E -O tracker tracker_role
+   # or via psql:
+   # CREATE ROLE tracker_role WITH SUPERUSER;
+   ```
+
+3. **Create the databases** owned by that role:
+
+   ```bash
+   createdb -O tracker_role tracker_db
+   createdb -O tracker_role tracker_db_test
+   ```
+
+4. **Copy the example env file** and supply only the key names (no values needed — the scripts read from the environment or `.env`):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Required `.env` keys (names only):
+
+   ```text
+   PGHOST
+   PGPORT
+   PGDATABASE          # tracker_db for dev, tracker_db_test for tests
+   PGUSER              # tracker_role (or your local postgres user)
+   PGPASSWORD          # password for the PGUSER
+   NODE_ENV            # development or test
+   ENABLE_DEV_PRO_TOGGLE  # "true" (dev only)
+   JWT_SECRET          # must be at least 32 chars (any value)
+   ```
+
+### Running the app
+
+| Command | Description |
+|---|---|
+| `npm run db:reset` | Migrates & seeds `tracker_db` (dev database). |
+| `npm run dev:all` | Starts both Vite frontend and Express backend with `NODE_ENV=development`. |
+| `npm run verify` | Runs lint, unit tests, db reset, integration tests, and build. |
+
+### Phase 2 — Empty in local mode
+
+The following are **empty/not connected** when running in local mode (Phase 2):
+
+- **Goals** — no goal tracking database
+- **Debts** — no debt tracking
+- **Assets** — no asset tracking
+- **Net worth** — computed from empty goals/debts/assets
+- **Notifications** — no notification service connected
+
+---
+
 ## Project Structure
 
 ```
