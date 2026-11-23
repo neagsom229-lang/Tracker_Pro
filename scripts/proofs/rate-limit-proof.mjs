@@ -1,9 +1,11 @@
-// scripts/rate-limit-proof.mjs — proves the rate limiter (dev stack, :4000):
+// scripts/proofs/rate-limit-proof.mjs — proves the rate limiter (dev stack, :4000):
 //   - 40 consecutive GET /api/auth/me → all 200, no 429s (the strict limiter
 //     only covers login/register; the general limiter is 300/15min).
 //   - 16 bad POST /api/auth/login → 429 on the 16th (strict login limiter is
 //     15/15min; 401s consume the window since skipSuccessfulRequests only
 //     skips 2xx).
+import './dev-db-guard.mjs';
+
 const BASE = 'http://localhost:4000';
 
 let allOk = true;

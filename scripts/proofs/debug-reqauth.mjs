@@ -1,3 +1,6 @@
+// scripts/proofs/debug-reqauth.mjs — auth/request debugging against the dev stack.
+import './dev-db-guard.mjs';
+
 const BASE = 'http://localhost:4000';
 const email = `secdbg-${Date.now()}@example.com`;
 

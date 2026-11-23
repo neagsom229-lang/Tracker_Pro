@@ -1,5 +1,6 @@
-// server/dbg10.js — date-shape + profile-whitelist verification (dev tracker_db).
-import pool from './db.js';
+// scripts/proofs/dbg10.js — date-shape + profile-whitelist verification (dev tracker_db).
+import './dev-db-guard.mjs';
+import pool from '../../server/db.js';
 
 const out = {};
 

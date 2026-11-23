@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // DB-backed test files reset the shared tracker_db_test in afterAll, so
+    // they must not run at the same time as one another.
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
@@ -29,6 +32,5 @@ export default defineConfig({
         functions: 35,
       },
     },
-    setup: ['server/setup-database-guard.js'],
   },
 });

@@ -1,4 +1,6 @@
-// server/dbg6.js — "register then immediately login, mixed case, 20x loop".
+// scripts/proofs/dbg6.js — "register then immediately login, mixed case, 20x loop".
+import './dev-db-guard.mjs';
+
 async function request(method, path, body) {
   const res = await fetch(`http://localhost:4000${path}`, {
     method,

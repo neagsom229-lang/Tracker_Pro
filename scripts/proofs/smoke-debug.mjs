@@ -1,4 +1,6 @@
-﻿import { chromium } from 'playwright';
+﻿// scripts/proofs/smoke-debug.mjs — browser smoke debugging against the dev stack.
+import './dev-db-guard.mjs';
+import { chromium } from 'playwright';
 
 const BASE = 'http://localhost:5173';
 const email = `smoke-${Date.now()}@example.com`;

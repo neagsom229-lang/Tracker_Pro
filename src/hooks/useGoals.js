@@ -4,8 +4,8 @@ import { useStore, selectGoalTotals } from '../store/useStore';
 import { isLocalBackend } from '../api/client';
 
 // Local mode: goals are phase 2 — writes are no-ops with a toast, never
-// an ErrorBoundary throw (the store has no goal actions yet; see
-// migrations/004_goals_and_debts.sql for the local tables).
+// an ErrorBoundary throw (the store has no goal actions yet, and the local
+// schema has no goals tables).
 const LOCAL_GOALS_MSG = 'Goals are not available in local mode yet (phase 2).';
 
 /**

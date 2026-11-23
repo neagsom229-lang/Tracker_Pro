@@ -7,6 +7,7 @@
 import { chromium } from 'playwright';
 import { Pool } from 'pg';
 import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
 
 const BASE = process.env.SMOKE_URL || 'http://localhost:5173';
 const email = `smoke-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
@@ -22,10 +23,15 @@ function parseDotenv(text) {
   return out;
 }
 const env = parseDotenv(readFileSync('.env', 'utf8'));
+const dbName = process.env.SMOKE_PGDATABASE ?? process.env.PGDATABASE ?? env.PGDATABASE;
+if (!dbName?.endsWith('_test') && process.env.ALLOW_DEV_DB !== '1') {
+  console.error(`[smoke:local] refusing to use database "${dbName}" — set ALLOW_DEV_DB=1 to allow a dev database.`);
+  process.exit(1);
+}
 const pool = new Pool({
   host: env.PGHOST,
   port: Number(env.PGPORT),
-  database: env.PGDATABASE,
+  database: dbName,
   user: env.PGUSER,
   password: env.PGPASSWORD,
 });
@@ -75,30 +81,42 @@ try {
   const smokeTxVisibleAfterReload = true;
 
   // ---- assets are phase 1: Net Worth form write → toast (not ErrorBoundary / console error) ----
-  await page.evaluate(() =>
-    fetch('/api/profile/is_pro', {
+  const toggleStatus = await page.evaluate(async () => {
+    const res = await fetch('/api/profile/is_pro', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: true }),
       credentials: 'include',
-    })
-  );
+    });
+    return res.status;
+  });
+  assert.equal(toggleStatus, 200, 'dev Pro toggle must return 200');
   await page.goto(BASE + '/networth', { waitUntil: 'load' });
   await page.waitForTimeout(600);
   await page.click('button:has-text("Manage")');
   await page.fill('input[placeholder="e.g. Savings account"]', 'Smoke Asset');
   await page.fill('input[placeholder="Value"]', '10');
   await page.click('form button[type="submit"]');
-  await page.waitForFunction(() => document.body.innerText.includes('Assets are not available in local mode yet (phase 2).'), { timeout: 10000 });
-  const networthStillRenders = (await page.locator('body').innerText()).includes('Net Worth');
+  const TOAST_TEXT = 'Assets are not available in local mode yet (phase 2).';
+  await page.waitForFunction((text) => document.body.innerText.includes(text), TOAST_TEXT, { timeout: 10000 });
+  const toastText = await page.locator('[role="status"]').innerText();
+  assert.match(toastText, /Assets are not available in local mode yet \(phase 2\)\./);
+  const bodyText = await page.locator('body').innerText();
+  assert.ok(!bodyText.includes('Something went wrong'), 'ErrorBoundary rendered instead of a toast');
+  const networthStillRenders = bodyText.includes('Net Worth');
+
+  assert.equal(consoleErrors.length, 0, `console errors: ${consoleErrors.join(' | ')}`);
+  assert.equal(supabaseRequests.length, 0, `supabase requests: ${supabaseRequests.join(' | ')}`);
 
   console.log(
     JSON.stringify(
       {
         email,
+        database: dbName,
         afterSignUp,
         smokeTxVisibleAfterReload,
         networthStillRenders,
+        toastText,
         consoleErrors,
         zeroConsoleErrors: consoleErrors.length === 0,
         supabaseRequests,
@@ -108,9 +126,19 @@ try {
       2
     )
   );
+} catch (err) {
+  console.error('[smoke:local] FAILED:', err.message);
+  console.error('url:', page.url());
+  console.error('consoleErrors:', JSON.stringify(consoleErrors));
+  console.error('body:', (await page.locator('body').innerText().catch(() => '')).slice(0, 1500));
+  throw err;
 } finally {
-  // Delete the smoke user afterwards (FKs cascade to profiles/transactions/budgets).
-  const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-  if (rows[0]) await pool.query('DELETE FROM users WHERE id = $1', [rows[0].id]);
-  await browser.close();
+  try {
+    // Delete the smoke user afterwards (FKs cascade to profiles/transactions/budgets).
+    const { rows } = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (rows[0]) await pool.query('DELETE FROM users WHERE id = $1', [rows[0].id]);
+  } finally {
+    await pool.end();
+    await browser.close();
+  }
 }

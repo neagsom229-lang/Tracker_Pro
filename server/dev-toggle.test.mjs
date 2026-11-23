@@ -1,6 +1,8 @@
+// @vitest-environment node
 // server/dev-toggle.test.mjs — PUT /api/profile/is_pro is mounted only when
 // NODE_ENV=development AND ENABLE_DEV_PRO_TOGGLE=true; a test of both states.
 // Uses real Express app on a random port against tracker_db_test.
+import './setup-database-guard.js'; // first: refuse a non-*_test PGDATABASE before connecting
 import { describe, it, expect, afterAll } from 'vitest';
 import { spawn } from 'node:child_process';
 import { Pool } from 'pg';
@@ -64,17 +66,23 @@ async function userIsPro(email) {
   return rows[0]?.is_pro;
 }
 
-afterAll(() => {
+afterAll(async () => {
   for (const child of children) {
     try {
       child.kill('SIGTERM');
     } catch {
+      /* already exited */
     }
   }
+  try {
+    const pool = new Pool({ host: env.PGHOST, port: Number(env.PGPORT), database: 'tracker_db_test', user: env.PGUSER, password: env.PGPASSWORD });
+    await pool.query('DELETE FROM users');
+    await pool.end();
+  } catch { /* cleanup errors suppressed — teardown must not mask test results */ }
 });
 
 describe('PUT /api/profile/is_pro dev toggle', () => {
-  it 'dev toggle PUT is_pro', async () => {
+  it('state A: NODE_ENV=development + toggle on → PUT 200, users.is_pro flips true', async () => {
     const email = `devtoggleA-${Date.now()}@example.com`;
     spawnServer({ port: 4681, nodeEnv: 'development', toggle: true });
     await waitForHealth(4681);
@@ -85,7 +93,7 @@ describe('PUT /api/profile/is_pro dev toggle', () => {
     expect(await userIsPro(email)).toBe(true);
   });
 
-  it 'state B: NODE_ENV=development, toggle flag off → PUT → 404, users.is_pro unchanged', async () => {
+  it('state B: NODE_ENV=development, toggle flag off → PUT → 404, users.is_pro unchanged', async () => {
     const email = `devtoggleB-${Date.now()}@example.com`;
     spawnServer({ port: 4682, nodeEnv: 'development', toggle: false });
     await waitForHealth(4682);
@@ -93,9 +101,10 @@ describe('PUT /api/profile/is_pro dev toggle', () => {
     expect(reg.status).toBe(200);
     const put = await putIsPro(4682, reg.setCookie);
     expect(put.status).toBe(404);
+    expect(await userIsPro(email)).toBe(false);
   });
 
-  it 'state C: NODE_ENV=production + toggle on → PUT → 404', async () => {
+  it('state C: NODE_ENV=production + toggle on → PUT → 404', async () => {
     const email = `devtoggleC-${Date.now()}@example.com`;
     spawnServer({ port: 4683, nodeEnv: 'production', toggle: true });
     await waitForHealth(4683);
@@ -103,9 +112,10 @@ describe('PUT /api/profile/is_pro dev toggle', () => {
     expect(reg.status).toBe(200);
     const put = await putIsPro(4683, reg.setCookie);
     expect(put.status).toBe(404);
+    expect(await userIsPro(email)).toBe(false);
   });
 
-  it 'state D: NODE_ENV=production + toggle off → PUT → 404', async () => {
+  it('state D: NODE_ENV=production + toggle off → PUT → 404', async () => {
     const email = `devtoggleD-${Date.now()}@example.com`;
     spawnServer({ port: 4684, nodeEnv: 'production', toggle: false });
     await waitForHealth(4684);
@@ -113,5 +123,6 @@ describe('PUT /api/profile/is_pro dev toggle', () => {
     expect(reg.status).toBe(200);
     const put = await putIsPro(4684, reg.setCookie);
     expect(put.status).toBe(404);
+    expect(await userIsPro(email)).toBe(false);
   });
 });

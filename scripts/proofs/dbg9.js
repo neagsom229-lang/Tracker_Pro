@@ -1,7 +1,8 @@
-// server/dbg9.js — user-isolation probe (dev tracker_db):
+// scripts/proofs/dbg9.js — user-isolation probe (dev tracker_db):
 // user B (alice) must not be able to read/PUT/DELETE user A (bob)'s rows.
+import './dev-db-guard.mjs';
 import fs from 'node:fs';
-import pool from './db.js';
+import pool from '../../server/db.js';
 
 function readCookie(path) {
   for (const line of fs.readFileSync(path, 'utf8').split('\n')) {

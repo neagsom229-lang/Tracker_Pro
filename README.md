@@ -41,9 +41,17 @@ cp .env.example .env
 # 3. Run development server
 npm run dev
 
-# 4. Run unit tests
+# 4. Run all tests (unit + integration)
 npm test
 ```
+
+### Tests
+
+- `npm run test:unit` — Vitest/jsdom only; `fetch` is stubbed, so no server and no database are used.
+- `npm run test:integration` — boots the real Express app (and the dev-toggle server) against the local `tracker_db_test` database. Covers `server/*.test.mjs` plus the API-backed `src/api/client.test.js`, `src/hooks/useProStatus.local.test.js`, and `src/lib/dataProvider.local.test.js`.
+- `npm test` — runs both suites in order.
+
+Integration tests require PostgreSQL with a `tracker_db_test` database. They never touch the dev database (`tracker_db`).
 
 ---
 

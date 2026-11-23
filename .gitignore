@@ -17,6 +17,11 @@ supabase/.temp/
 # Generated/CI scratch
 coverage/
 audit.json
+*.err
+jar.txt
+test-output*.txt
+lint-out*.txt
+tracker_db_backup.sql
 
 # uipro-installed skill assets (re-installable via `uipro init`)
 .opencode/

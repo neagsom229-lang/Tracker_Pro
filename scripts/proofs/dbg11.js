@@ -1,4 +1,6 @@
-// server/dbg11.js — auth rate-limit probe: 20 rapid register attempts.
+// scripts/proofs/dbg11.js — auth rate-limit probe: 20 rapid register attempts.
+import './dev-db-guard.mjs';
+
 const statuses = [];
 for (let i = 0; i < 20; i++) {
   const res = await fetch('http://localhost:4000/api/auth/register', {

@@ -26,6 +26,15 @@ router.get('/transactions', requireAuth, async (req, res) => {
   res.json(rows.map(mapRow));
 });
 
+router.get('/transactions/:id', requireAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    'SELECT id, description, amount, category, date, created_at FROM transactions WHERE id = $1 AND user_id = $2',
+    [req.params.id, req.user.id]
+  );
+  if (rows.length === 0) return notFound(res);
+  res.json(mapRow(rows[0]));
+});
+
 router.post('/transactions', requireAuth, async (req, res) => {
   const parsed = createTransactionSchema.safeParse(req.body);
   if (!parsed.success) return badRequest(res, parsed.error.issues);

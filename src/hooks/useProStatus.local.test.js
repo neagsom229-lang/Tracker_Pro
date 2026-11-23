@@ -2,8 +2,8 @@
 // HTTP (startTestApp on tracker_db_test); nothing is mocked. Free user:
 // no subscription; users.is_pro = true: active with provider "local".
 // @vitest-environment jsdom
-/* global vi, afterAll, describe, it, expect */
-import { describe, it, expect, afterEach } from 'vitest';
+import '../../server/setup-database-guard.js'; // first: refuse a non-*_test PGDATABASE before connecting
+import { describe, it, expect, afterEach, afterAll, vi } from 'vitest';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
@@ -31,7 +31,6 @@ globalThis.fetch = async (url, init) => {
 vi.stubEnv('VITE_API_BASE', `${base}/api`);
 vi.stubEnv('VITE_DATA_BACKEND', 'local');
 
-const { api } = await import('../api/client');
 const { useProStatus } = await import('./useProStatus');
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -81,18 +80,20 @@ afterAll(async () => {
     await pool.query('DELETE FROM users');
     await pool.end();
   } catch { /* cleanup errors suppressed — teardown must not mask test results */ }
+  await new Promise((r) => server.close(r));
 });
 
 describe('useProStatus — local mode', () => {
-  it 'free user isPro false', async () => {
+  it('free user isPro false', async () => {
     await register('pro-free@example.com');
     const probe = await mount();
     expect(await waitFor(() => probe.isPro === false)).toBe(true);
     expect(probe.subscription).toBe(null);
-  }
+  });
 
-  it 'users.is_pro = true: subscription active, payment_provider "local"', async () => {
-    const { id } = await register('pro-user@example.com');
+  it('users.is_pro = true: subscription active, payment_provider "local"', async () => {
+    const reg = await register('pro-user@example.com');
+    const id = reg.body.id;
     // Flip the real flag in the DB — the hook reads it via the real API.
     const { Pool } = await import('pg');
     const pool = new Pool({ host: process.env.PGHOST, port: Number(process.env.PGPORT), database: process.env.PGDATABASE, user: process.env.PGUSER, password: process.env.PGPASSWORD });
@@ -104,5 +105,5 @@ describe('useProStatus — local mode', () => {
     expect(probe.subscription?.status).toBe('active');
     expect(probe.subscription?.payment_provider).toBe('local');
     expect(probe.isPendingReview).toBe(false);
-  }
+  });
 });

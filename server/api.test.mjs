@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { describe, it, expect } from 'vitest';
+import './setup-database-guard.js'; // first: refuse a non-*_test PGDATABASE before connecting
+import { afterAll, describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { startTestApp } from './test-app.mjs';
 
@@ -13,7 +14,7 @@ afterAll(async () => {
     const pool = new Pool({ host: process.env.PGHOST, port: Number(process.env.PGPORT), database: 'tracker_db_test', user: process.env.PGUSER, password: process.env.PGPASSWORD });
     await pool.query('DELETE FROM users');
     await pool.end();
-  } catch {}
+  } catch { /* cleanup errors suppressed — teardown must not mask test results */ }
   await new Promise((r) => server.close(r));
 });
 
@@ -74,28 +75,39 @@ describe('local API (supertest, tracker_db_test)', () => {
     expect(del.status).toBe(200);
   });
 
-  it 'isolation user B tx 404', async () => {
+  it('isolation: user B GET/PUT/DELETE user A\'s transaction id → 404 (A still 200)', async () => {
     const a = await register(`apitest-isoA-${Date.now()}@example.com`);
     const b = await register(`apitest-isoB-${Date.now()}@example.com`);
     const add = await request(app).post('/api/transactions').set('Cookie', cookieOf(a)).send({ description: 'A Tx', amount: -5, category: 'food', date: '2026-01-15' });
     expect(add.status).toBe(200);
     const txId = add.body.id;
+    // A can read its own row; B cannot read, update or delete it.
+    const own = await request(app).get(`/api/transactions/${txId}`).set('Cookie', cookieOf(a));
+    expect(own.status).toBe(200);
+    expect(own.body.id).toBe(txId);
     expect((await request(app).get(`/api/transactions/${txId}`).set('Cookie', cookieOf(b))).status).toBe(404);
     expect((await request(app).put(`/api/transactions/${txId}`).set('Cookie', cookieOf(b)).send({ description: 'Hacked' })).status).toBe(404);
     expect((await request(app).delete(`/api/transactions/${txId}`).set('Cookie', cookieOf(b))).status).toBe(404);
-  }
+  });
 
-  it 'isolation: user B cannot DELETE user A\'s budget (404); B\'s list is empty', async () => {
+  it('isolation: user B cannot read/upsert/delete user A\'s category-keyed budget', async () => {
     const a = await register(`apitest-isoA2-${Date.now()}@example.com`);
     const b = await register(`apitest-isoB2-${Date.now()}@example.com`);
     const up = await request(app).post('/api/budgets').set('Cookie', cookieOf(a)).send({ category: 'food', monthly_limit: 100 });
     expect(up.status).toBe(200);
+    // GET: B's list does not contain A's budget; A's list does.
+    expect((await request(app).get('/api/budgets').set('Cookie', cookieOf(b))).body.food).toBeUndefined();
+    expect((await request(app).get('/api/budgets').set('Cookie', cookieOf(a))).body.food).toBe(100);
+    // DELETE: B cannot delete A's budget; A's row is untouched.
     expect((await request(app).delete('/api/budgets/food').set('Cookie', cookieOf(b))).status).toBe(404);
-    const listB = await request(app).get('/api/budgets').set('Cookie', cookieOf(b));
-    expect(listB.body.food).toBeUndefined();
-  }
+    expect((await request(app).get('/api/budgets').set('Cookie', cookieOf(a))).body.food).toBe(100);
+    // PUT-equivalent (POST upsert): B's same-category row is separate from A's.
+    expect((await request(app).post('/api/budgets').set('Cookie', cookieOf(b)).send({ category: 'food', monthly_limit: 999 })).status).toBe(200);
+    expect((await request(app).get('/api/budgets').set('Cookie', cookieOf(a))).body.food).toBe(100);
+    expect((await request(app).get('/api/budgets').set('Cookie', cookieOf(b))).body.food).toBe(999);
+  });
 
-  it 'budgets: upsert, list, delete', async () => {
+  it('budgets: upsert, list, delete', async () => {
     const reg = await register(`apitest-budgets-${Date.now()}@example.com`);
     const cookie = cookieOf(reg);
     const up = await request(app).post('/api/budgets').set('Cookie', cookie).send({ category: 'food', monthly_limit: 100 });
@@ -104,33 +116,43 @@ describe('local API (supertest, tracker_db_test)', () => {
     expect(list.body.food).toBe(100);
     const del = await request(app).delete('/api/budgets/food').set('Cookie', cookie);
     expect(del.status).toBe(200);
-  }
+  });
 
-  it 'recurring: add, list, delete', async () => {
+  it('recurring: add, list, delete', async () => {
     const reg = await register(`apitest-recurring-${Date.now()}@example.com`);
     const cookie = cookieOf(reg);
     const add = await request(app).post('/api/recurring').set('Cookie', cookie).send({ description: 'Api Recurring', amount: -5, category: 'subscriptions', frequency: 'monthly', nextRunDate: '2026-12-01' });
     expect(add.status).toBe(200);
     const list = await request(app).get('/api/recurring').set('Cookie', cookie);
     expect(list.body.some((r) => r.id === add.body.id)).toBe(true);
-  }
+  });
 
-  it 'limiter scope: hammering GET /api/auth/me is not limited by the strict login limiter (general limiter 300)', async () => {
+  it('limiter scope: 40× GET /api/auth/me → all 200, never 429 (general limiter 300)', async () => {
     const statuses = [];
-    for (let i = 0; i < 30; i++) statuses.push((await request(app).get('/api/auth/me')).status);
+    for (let i = 0; i < 40; i++) statuses.push((await request(app).get('/api/auth/me')).status);
     expect(statuses.every((s) => s === 200)).toBe(true);
-  }
+    expect(statuses).not.toContain(429);
+  });
 
-  it 'limiter scope: 16 bad logins → the 16th → 429', async () => {
+  it('malformed JSON body → 400 {"ok":false,"error":"Invalid JSON"}', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"email":');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ ok: false, error: 'Invalid JSON' });
+  });
+
+  it('limiter scope: 16 bad logins → the 16th → 429', async () => {
     const statuses = [];
     for (let i = 0; i < 16; i++) {
       const res = await request(app).post('/api/auth/login').send({ email: `bad-${Date.now()}-${i}@example.com`, password: 'nope' });
       statuses.push(res.status);
     }
     expect(statuses[15]).toBe(429);
-  }
+  });
 
-  it 'phase-1 surfaces: notifications/goals/debts/assets/net_worth_history → [], parse_corrections → {}', async () => {
+  it('phase-1 surfaces: notifications/goals/debts/assets/net_worth_history → [], parse_corrections → {}', async () => {
     const reg = await register(`apitest-empty-${Date.now()}@example.com`);
     const cookie = cookieOf(reg);
     for (const path of ['/api/notifications', '/api/goals', '/api/debts', '/api/assets', '/api/net_worth_history']) {

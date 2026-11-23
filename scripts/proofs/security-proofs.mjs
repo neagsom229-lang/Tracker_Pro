@@ -1,12 +1,13 @@
-// scripts/security-proofs.mjs — security proofs for the local API after the
+// scripts/proofs/security-proofs.mjs — security proofs for the local API after the
 // requireAuth/optionalAuth refactor (dev stack, :4000):
 //   1. User B cannot GET/PUT/DELETE user A's transaction id (404 each) and
 //      cannot DELETE user A's budget (404). (SQL: A's rows still exist, B has none.)
 //   2. register + login 20× with mixed-case email → all 200.
 //   3. The server refuses to start with a missing or short JWT_SECRET (exit 1).
+import './dev-db-guard.mjs';
 import { spawn } from 'node:child_process';
 import { Pool } from 'pg';
-import { loadDotenv } from '../server/test-app.mjs';
+import { loadDotenv } from '../../server/test-app.mjs';
 
 const env = loadDotenv();
 const BASE = 'http://localhost:4000';

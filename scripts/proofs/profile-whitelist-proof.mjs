@@ -1,6 +1,7 @@
-// scripts/profile-whitelist-proof.mjs — confirms PUT /api/profile whitelists
+// scripts/proofs/profile-whitelist-proof.mjs — confirms PUT /api/profile whitelists
 // display_name and currency only: sending isPro/isAdmin in the body must not
 // change anything, shown via the SELECT after. Cleans up the proof user.
+import './dev-db-guard.mjs';
 import { Pool } from 'pg';
 import { readFileSync } from 'node:fs';
 
