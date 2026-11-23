@@ -185,4 +185,22 @@ describe('local API (supertest, tracker_db_test)', () => {
     const res = await request(app).delete('/api/transactions/not-a-uuid').set('Cookie', cookie.split(';')[0]);
     expect(res.status).toBe(404);
   });
+
+  it('uuid routes: uppercase uuid → 404, unknown lowercase uuid → 404, known uuid → 200', async () => {
+    const reg = await register(`apitest-uuids-${Date.now()}@example.com`);
+    const cookie = cookieOf(reg);
+    const create = await request(app).post('/api/transactions').set('Cookie', cookie.split(';')[0]).send({ description: 'UUID Test', amount: -9.99, category: 'misc', date: '2026-02-10' });
+    const knownId = create.body.id; // valid lowercase uuid v4
+    // Uppercase valid-uuid-format string → 404 (route validates lowercase only)
+    const upperRes = await request(app).get(`/api/transactions/${knownId.toUpperCase()}`).set('Cookie', cookie);
+    expect(upperRes.status).toBe(404);
+    // Valid-but-unknown lowercase uuid → 404
+    const unknownId = '11111111-1111-1111-1111-111111111111';
+    const unknownRes = await request(app).get(`/api/transactions/${unknownId}`).set('Cookie', cookie);
+    expect(unknownRes.status).toBe(404);
+    // Known transaction id → 200
+    const knownRes = await request(app).get(`/api/transactions/${knownId}`).set('Cookie', cookie);
+    expect(knownRes.status).toBe(200);
+    expect(knownRes.body.id).toBe(knownId);
+  });
 });
