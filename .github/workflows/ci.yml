@@ -26,6 +26,8 @@ jobs:
     env:
       NODE_ENV: development
       ENABLE_DEV_PRO_TOGGLE: "true"
+      VITE_SUPABASE_URL: https://placeholder.supabase.co
+      VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
       PGHOST: 127.0.0.1
       PGPORT: "5432"
       PGDATABASE: tracker_db_test
