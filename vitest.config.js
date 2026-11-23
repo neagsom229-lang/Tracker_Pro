@@ -6,9 +6,15 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    // DB-backed test files reset the shared tracker_db_test in afterAll, so
-    // they must not run at the same time as one another.
-    fileParallelism: false,
+    // Non-DOM suites run in the cheaper node environment; component/hook
+    // tests keep jsdom (a file-level @vitest-environment annotation wins).
+    environmentMatchGlobs: [
+      ['server/**', 'node'],
+      ['src/api/**', 'node'],
+      ['src/lib/**', 'node'],
+      ['src/store/**', 'node'],
+      ['src/utils/**', 'node'],
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

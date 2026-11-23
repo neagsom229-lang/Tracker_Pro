@@ -1,5 +1,5 @@
 // @vitest-environment node
-// server/dev-toggle.test.mjs — PUT /api/profile/is_pro is mounted only when
+// server/dev-toggle.int.test.mjs — PUT /api/profile/is_pro is mounted only when
 // NODE_ENV=development AND ENABLE_DEV_PRO_TOGGLE=true; a test of both states.
 // Uses real Express app on a random port against tracker_db_test.
 import './setup-database-guard.js'; // first: refuse a non-*_test PGDATABASE before connecting

@@ -47,8 +47,8 @@ npm test
 
 ### Tests
 
-- `npm run test:unit` — Vitest/jsdom only; `fetch` is stubbed, so no server and no database are used.
-- `npm run test:integration` — boots the real Express app (and the dev-toggle server) against the local `tracker_db_test` database. Covers `server/*.test.mjs` plus the API-backed `src/api/client.test.js`, `src/hooks/useProStatus.local.test.js`, and `src/lib/dataProvider.local.test.js`.
+- `npm run test:unit` — fast Vitest suite (node environment for non-DOM tests, jsdom for components/hooks); `fetch` is stubbed, so no server and no database are used.
+- `npm run test:integration` — boots the real Express app (and the dev-toggle server) against the local `tracker_db_test` database. Covers `server/*.int.test.mjs` plus the API-backed `src/api/client.int.test.js`, `src/hooks/useProStatus.local.int.test.js`, and `src/lib/dataProvider.local.int.test.js`.
 - `npm test` — runs both suites in order.
 
 Integration tests require PostgreSQL with a `tracker_db_test` database. They never touch the dev database (`tracker_db`).

@@ -1,54 +1,57 @@
--- Local PostgreSQL (tracker_db) — initial schema v1
+-- Local PostgreSQL — consolidated initial schema (001–003 squashed).
 --
 -- Plain Postgres: no auth.users, no auth.uid(), no RLS, no realtime
--- publications. Access control is enforced by Express (see server/index.js):
--- every query filters by the authenticated user's id.
+-- publications. Access control is enforced by Express: every query filters
+-- by the authenticated user's id.
+--
+-- The app treats ids as opaque strings (React keys, `t.id === id`), so ids
+-- are UUIDs with gen_random_uuid() for parity with the Supabase-era schema.
+-- `is_admin` and `email` live on `users`; `profiles` keeps display_name and
+-- currency. `users.is_pro` is the local dev toggle for Pro status.
 
-CREATE TABLE IF NOT EXISTS users (
-  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+CREATE TABLE users (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email         TEXT        NOT NULL,
-  password_hash TEXT        NOT NULL,               -- bcrypt hash (server-side only)
-  display_name  TEXT,
+  password_hash TEXT        NOT NULL,               -- bcrypt hash (server-side)
   is_admin      BOOLEAN     NOT NULL DEFAULT FALSE,
+  is_pro        BOOLEAN     NOT NULL DEFAULT FALSE, -- dev toggle: local Pro status stand-in
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Case-insensitive uniqueness: lower(email) unique index (or citext).
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users (lower(email));
+-- Case-insensitive uniqueness via lower(email).
+CREATE UNIQUE INDEX users_email_lower_idx ON users (lower(email));
 
-CREATE TABLE IF NOT EXISTS profiles (
-  id           BIGINT PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
-  email        TEXT,
+CREATE TABLE profiles (
+  id           UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
   display_name TEXT,
   currency     TEXT        NOT NULL DEFAULT 'USD',
-  is_admin     BOOLEAN     NOT NULL DEFAULT FALSE,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS transactions (
-  id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id     BIGINT         NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+CREATE TABLE transactions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID           NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   description TEXT           NOT NULL,
   amount      NUMERIC(12, 2) NOT NULL CHECK (amount <> 0), -- income > 0, expense < 0
-  category    TEXT           NOT NULL CHECK (trim(category) <> ''), -- transaction "type"
+  category    TEXT           NOT NULL CHECK (trim(category) <> ''), -- the app's "type"/bucket column
   date        DATE           NOT NULL,
   created_at  TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS transactions_user_id_date_idx ON transactions (user_id, date);
+CREATE INDEX transactions_user_id_date_idx ON transactions (user_id, date);
 
-CREATE TABLE IF NOT EXISTS budgets (
-  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id        BIGINT         NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+CREATE TABLE budgets (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id        UUID           NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   category       TEXT           NOT NULL,
   monthly_limit  NUMERIC(12, 2) NOT NULL CHECK (monthly_limit > 0),
   created_at     TIMESTAMPTZ    NOT NULL DEFAULT now(),
   UNIQUE (user_id, category)
 );
 
-CREATE TABLE IF NOT EXISTS recurring_rules (
-  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  user_id       BIGINT         NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+CREATE TABLE recurring_rules (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID           NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   description   TEXT           NOT NULL,
   amount        NUMERIC(12, 2) NOT NULL,
   category      TEXT           NOT NULL,
@@ -56,4 +59,4 @@ CREATE TABLE IF NOT EXISTS recurring_rules (
   next_run_date DATE           NOT NULL,
   created_at    TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS recurring_rules_user_id_idx ON recurring_rules (user_id);
+CREATE INDEX recurring_rules_user_id_idx ON recurring_rules (user_id);
