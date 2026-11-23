@@ -3,11 +3,14 @@
 // only from .env (parsed here); the DB name is overridden to tracker_db_test.
 // A fetch wrapper keeps a session-cookie jar so the real client (src/api)
 // can authenticate against the test server.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
-export function loadDotenv() {
+// .env is a local convenience only. CI (and any environment that exports the
+// variables directly) has no .env file; missing is fine.
+export function loadDotenv(path = '.env') {
   const env = {};
-  for (const line of readFileSync('.env', 'utf8').split('\n')) {
+  if (!existsSync(path)) return env;
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/);
     if (m) env[m[1]] = m[2];
   }
@@ -24,6 +27,12 @@ export async function startTestApp() {
   // The dev-toggle gate is on for tests that need it.
   process.env.NODE_ENV = 'development';
   process.env.ENABLE_DEV_PRO_TOGGLE = 'true';
+
+  // No fallback: the signing secret must be supplied by the environment
+  // (.env locally, CI secrets/vars in Actions).
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET must be set in the environment and be at least 32 characters long');
+  }
 
   const { app } = await import('./app.js');
   const server = await new Promise((resolve) => {

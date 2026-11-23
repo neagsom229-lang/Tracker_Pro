@@ -4,12 +4,13 @@
 // Refuses unless PGHOST is local and NODE_ENV is not production.
 import { Pool } from 'pg';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const isTest = process.argv.includes('--test');
 
 function readDotenv() {
   const env = {};
+  if (!existsSync('.env')) return env; // CI supplies the variables directly
   for (const line of readFileSync('.env', 'utf8').split('\n')) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/);
     if (m) env[m[1]] = m[2];

@@ -8,7 +8,9 @@ import { spawn } from 'node:child_process';
 import { Pool } from 'pg';
 import { loadDotenv } from './test-app.mjs';
 
-const env = loadDotenv();
+const env = { ...loadDotenv(), ...process.env };
+const testDb = env.TEST_PGDATABASE ?? 'tracker_db_test';
+if (!testDb.endsWith('_test')) throw new Error(`test database "${testDb}" must end with "_test"`);
 const children = [];
 
 function spawnServer({ port, nodeEnv, toggle }) {
@@ -16,7 +18,7 @@ function spawnServer({ port, nodeEnv, toggle }) {
     cwd: process.cwd(),
     env: {
       ...env,
-      PGDATABASE: 'tracker_db_test',
+      PGDATABASE: testDb,
       PORT: String(port),
       NODE_ENV: nodeEnv,
       ENABLE_DEV_PRO_TOGGLE: toggle ? 'true' : '',
@@ -60,7 +62,7 @@ async function putIsPro(port, setCookie) {
 }
 
 async function userIsPro(email) {
-  const pool = new Pool({ host: env.PGHOST, port: Number(env.PGPORT), database: 'tracker_db_test', user: env.PGUSER, password: env.PGPASSWORD });
+  const pool = new Pool({ host: env.PGHOST, port: Number(env.PGPORT), database: testDb, user: env.PGUSER, password: env.PGPASSWORD });
   const { rows } = await pool.query('SELECT is_pro FROM users WHERE lower(email) = lower($1)', [email]);
   await pool.end();
   return rows[0]?.is_pro;
@@ -75,7 +77,7 @@ afterAll(async () => {
     }
   }
   try {
-    const pool = new Pool({ host: env.PGHOST, port: Number(env.PGPORT), database: 'tracker_db_test', user: env.PGUSER, password: env.PGPASSWORD });
+    const pool = new Pool({ host: env.PGHOST, port: Number(env.PGPORT), database: testDb, user: env.PGUSER, password: env.PGPASSWORD });
     await pool.query('DELETE FROM users');
     await pool.end();
   } catch { /* cleanup errors suppressed — teardown must not mask test results */ }
