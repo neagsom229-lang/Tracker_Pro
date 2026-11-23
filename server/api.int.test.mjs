@@ -164,4 +164,25 @@ describe('local API (supertest, tracker_db_test)', () => {
     expect(corrections.status).toBe(200);
     expect(corrections.body).toEqual({});
   });
+
+  it('malformed ids: GET /api/transactions/not-a-uuid → 404', async () => {
+    const reg = await register(`apitest-mid-${Date.now()}@example.com`);
+    const cookie = cookieOf(reg);
+    const res = await request(app).get('/api/transactions/not-a-uuid').set('Cookie', cookie);
+    expect(res.status).toBe(404);
+  });
+
+  it('malformed ids: PUT /api/transactions/not-a-uuid → 404 (with auth)', async () => {
+    const reg = await register(`apitest-midput-${Date.now()}@example.com`);
+    const cookie = cookieOf(reg);
+    const res = await request(app).put('/api/transactions/not-a-uuid').set('Cookie', cookie.split(';')[0]).send({ description: 'x' });
+    expect(res.status).toBe(404);
+  });
+
+  it('malformed ids: DELETE /api/transactions/not-a-uuid → 404 (with auth)', async () => {
+    const reg = await register(`apitest-middel-${Date.now()}@example.com`);
+    const cookie = cookieOf(reg);
+    const res = await request(app).delete('/api/transactions/not-a-uuid').set('Cookie', cookie.split(';')[0]);
+    expect(res.status).toBe(404);
+  });
 });

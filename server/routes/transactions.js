@@ -18,6 +18,9 @@ const mapRow = (r) =>
       }
     : null;
 
+// UUID v4 regex (lowercase hex, 36 chars with dashes)
+const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 router.get('/transactions', requireAuth, async (req, res) => {
   const { rows } = await pool.query(
     'SELECT id, description, amount, category, date, created_at FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC',
@@ -27,6 +30,7 @@ router.get('/transactions', requireAuth, async (req, res) => {
 });
 
 router.get('/transactions/:id', requireAuth, async (req, res) => {
+  if (!uuidRx.test(req.params.id)) return notFound(res);
   const { rows } = await pool.query(
     'SELECT id, description, amount, category, date, created_at FROM transactions WHERE id = $1 AND user_id = $2',
     [req.params.id, req.user.id]
@@ -47,6 +51,7 @@ router.post('/transactions', requireAuth, async (req, res) => {
 });
 
 router.put('/transactions/:id', requireAuth, async (req, res) => {
+  if (!uuidRx.test(req.params.id)) return notFound(res);
   const parsed = updateTransactionSchema.safeParse(req.body);
   if (!parsed.success) return badRequest(res, parsed.error.issues);
   const patch = {};
@@ -67,6 +72,7 @@ router.put('/transactions/:id', requireAuth, async (req, res) => {
 });
 
 router.delete('/transactions/:id', requireAuth, async (req, res) => {
+  if (!uuidRx.test(req.params.id)) return notFound(res);
   const { rows } = await pool.query(
     'DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id',
     [req.params.id, req.user.id]
