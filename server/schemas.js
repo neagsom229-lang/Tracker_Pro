@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+export const isUuid = (val) => z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'Invalid UUID').safeParse(val);
+export const uuidSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'Invalid UUID');
 
 export const registerSchema = z.object({
   email: z.string().regex(emailRegex, 'Invalid email address'),
