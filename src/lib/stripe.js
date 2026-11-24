@@ -1,11 +1,8 @@
 import { supabase } from './supabaseClient';
 
-// Your Stripe Payment Link for the Pro subscription plan. It's created
-// once in the Stripe Dashboard (Payment Links > New) and never changes —
-// unlike a Checkout Session, there's no per-user object to create on our
-// server, which is what makes this integration so simple. Swap this for
-// your live-mode link when you go to production.
-export const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/test_28E3cwfmXe753yI1Ew6kg01';
+// Stripe Payment Link for the Pro subscription plan. Configured via env so
+// test/live mode is controlled by deployment config, not source code.
+export const STRIPE_PAYMENT_LINK = import.meta.env.VITE_STRIPE_PAYMENT_LINK || '';
 
 /**
  * Sends the browser to the Payment Link with `client_reference_id` set
@@ -18,6 +15,7 @@ export const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/test_28E3cwfmXe753yI1
  * anywhere in this file — it's just a URL redirect.
  */
 export async function redirectToPaymentLink() {
+  if (!STRIPE_PAYMENT_LINK) throw new Error('Stripe payment link is not configured.');
   const {
     data: { user },
   } = await supabase.auth.getUser();

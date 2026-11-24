@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:all": "node scripts/dev-all.mjs",
     "prebuild": "node scripts/check-vercel-env.mjs",
-    "build": "vite build",
+    "build": "node scripts/check-vercel-env.mjs && vite build",
     "preview": "vite preview",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run --exclude \"**/*.int.test.*\"",
