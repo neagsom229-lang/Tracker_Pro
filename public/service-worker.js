@@ -16,7 +16,7 @@
  * offline", not "the app pretends it has your data".
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `obsidian-shell-${VERSION}`;
 
 // Only the entry point is precached. Vite fingerprints every asset
@@ -71,7 +71,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: stale-while-revalidate.
+  // Hashed build assets: cache-first (immutable filenames).
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.open(SHELL_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const response = await fetch(request);
+        if (response.ok && response.type === 'basic') cache.put(request, response.clone());
+        return response;
+      }),
+    );
+    return;
+  }
+
+  // Other same-origin static assets: stale-while-revalidate.
   event.respondWith(
     caches.open(SHELL_CACHE).then(async (cache) => {
       const cached = await cache.match(request);
@@ -81,9 +95,8 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => cached);
-
       return cached || network;
-    })
+    }),
   );
 });
 
