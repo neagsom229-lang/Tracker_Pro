@@ -65,6 +65,14 @@ vi.mock('../lib/supabaseClient', () => ({
   },
 }));
 
+vi.mock('../api/client', () => ({
+  // These tests exercise the Supabase path of useProStatus; forcing the
+  // backend flag off makes them pass whether or not the test run sets
+  // VITE_DATA_BACKEND=local. (The local path is covered by other tests.)
+  isLocalBackend: () => false,
+  api: {},
+}));
+
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 import { useProStatus } from './useProStatus';

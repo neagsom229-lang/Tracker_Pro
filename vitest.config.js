@@ -5,7 +5,20 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    define: {
+      'process.env.VITE_SUPABASE_URL': 'https://placeholder.supabase.co',
+      'process.env.VITE_SUPABASE_ANON_KEY': 'placeholder-anon-key-for-ci',
+    },
     globals: true,
+    // Non-DOM suites run in the cheaper node environment; component/hook
+    // tests keep jsdom (a file-level @vitest-environment annotation wins).
+    environmentMatchGlobs: [
+      ['server/**', 'node'],
+      ['src/api/**', 'node'],
+      ['src/lib/**', 'node'],
+      ['src/store/**', 'node'],
+      ['src/utils/**', 'node'],
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { initTheme, applyTheme } from '../utils/theme';
 import { supabase } from '../lib/supabaseClient';
 import { dataProvider } from '../lib/dataProvider';
+import { api, isLocalBackend } from '../api/client';
 import { addInterval, todayISO } from '../utils/recurrence';
 
 /**
@@ -59,6 +60,23 @@ export const useStore = create((set, get) => ({
     };
 
     // 1. Check for an existing session on first load (e.g. page refresh).
+    //    Local mode: the Express API's GET /api/auth/me reads the httpOnly
+    //    session cookie — no Supabase network call at all.
+    const loadLocalSession = async () => {
+      try {
+        const data = await api.auth.me();
+        set({ session: data, authLoading: false });
+        if (data) initDataOnce();
+      } catch {
+        set({ session: null, authLoading: false });
+      }
+    };
+
+    if (isLocalBackend()) {
+      void loadLocalSession();
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.access_token) {
         supabase.realtime.setAuth(session.access_token);
@@ -93,6 +111,11 @@ export const useStore = create((set, get) => ({
   },
 
   logout: async () => {
+    if (isLocalBackend()) {
+      await api.auth.logout();
+      set({ session: null, authLoading: false });
+      return;
+    }
     await supabase.auth.signOut();
   },
 

@@ -11,6 +11,7 @@ import {
 import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
+import { api, isLocalBackend } from '../api/client';
 import { redirectToCustomerPortal } from '../lib/stripe';
 import { formatDate } from '../utils/format';
 
@@ -35,10 +36,51 @@ export default function BillingPanel() {
   } = useProStatus();
   const openUpgradeModal = useStore((s) => s.openUpgradeModal);
   const [actionLoading, setActionLoading] = useState(false);
+  const isLocal = isLocalBackend() && import.meta.env.DEV;
+  const [proToggleBusy, setProToggleBusy] = useState(false);
 
-  const provider = subscription?.payment_provider || 'stripe'; // 'stripe' | 'aba' | 'aba_manual'
+  // Local-mode dev toggle: flips users.is_pro via PUT /api/profile/is_pro.
+  const handleProToggle = async () => {
+    const next = !isPro;
+    setProToggleBusy(true);
+    try {
+      await api.profile.setProToggle(next);
+      toast.success(next ? 'Pro unlocked (users.is_pro = true).' : 'Pro locked (users.is_pro = false).');
+      await refresh();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setProToggleBusy(false);
+    }
+  };
+
+  const localProToggle = (
+    <div className="flex items-center justify-between rounded-xl border border-white/8 bg-muted px-4 py-3 mb-4">
+      <span className="text-xs text-slate-400">
+        Dev toggle — Pro = <span className="gilt-text font-semibold">users.is_pro</span> in tracker_db
+      </span>
+      <button
+        onClick={handleProToggle}
+        disabled={proToggleBusy}
+        aria-pressed={isPro}
+        className={`rounded-full px-3 py-1 text-xs font-medium border transition disabled:opacity-60 ${
+          isPro
+            ? 'border-gilt-gold/50 bg-gilt-gold/15 text-gilt-gold'
+            : 'border-white/10 text-slate-400 hover:text-slate-200'
+        }`}
+      >
+        {proToggleBusy ? 'Saving…' : isPro ? 'On' : 'Off'}
+      </button>
+    </div>
+  );
+
+  const provider = subscription?.payment_provider || 'stripe'; // 'stripe' | 'aba' | 'aba_manual' | 'local'
 
   const handleManage = async () => {
+    if (provider === 'local') {
+      toast.success('Local mode: Pro is the users.is_pro toggle in tracker_db (phase 2).');
+      return;
+    }
     // ABA subscriptions can't use the Stripe customer portal; they need
     // to be managed manually until we build an ABA cancel endpoint.
     if (provider === 'aba' || provider === 'aba_manual') {
@@ -93,7 +135,11 @@ export default function BillingPanel() {
             Status: {STATUS_LABEL[subscription?.status] || subscription?.status}
           </p>
           <p className="text-xs text-slate-500 mb-5 flex items-center gap-1.5">
-            {provider === 'aba' || provider === 'aba_manual' ? (
+            {provider === 'local' ? (
+              <>
+                <Landmark size={12} /> Local backend (users.is_pro)
+              </>
+            ) : provider === 'aba' || provider === 'aba_manual' ? (
               <>
                 <Landmark size={12} /> Paid via ABA KHQR
               </>
@@ -104,18 +150,22 @@ export default function BillingPanel() {
             )}
           </p>
 
-          <button
-            onClick={handleManage}
-            disabled={actionLoading}
-            className="rounded-xl px-4 py-2.5 text-sm flex items-center gap-2 border border-white/10 text-slate-200 hover:bg-white/5 disabled:opacity-70"
-          >
-            {actionLoading
-              ? 'Opening portal…'
-              : provider === 'aba' || provider === 'aba_manual'
-              ? 'Contact support to cancel'
-              : 'Manage subscription & invoices'}
-            {provider !== 'aba' && provider !== 'aba_manual' && <ExternalLink size={14} />}
-          </button>
+          {isLocal ? (
+            localProToggle
+          ) : (
+            <button
+              onClick={handleManage}
+              disabled={actionLoading}
+              className="rounded-xl px-4 py-2.5 text-sm flex items-center gap-2 border border-white/10 text-slate-200 hover:bg-white/5 disabled:opacity-70"
+            >
+              {actionLoading
+                ? 'Opening portal…'
+                : provider === 'aba' || provider === 'aba_manual'
+                ? 'Contact support to cancel'
+                : 'Manage subscription & invoices'}
+              {provider !== 'aba' && provider !== 'aba_manual' && <ExternalLink size={14} />}
+            </button>
+          )}
         </>
       )}
 
@@ -191,20 +241,28 @@ export default function BillingPanel() {
             )}
             .
           </p>
-          <p className="text-sm text-slate-500 mb-5">
-            Upgrade to unlock budgets, recurring transactions, exports, and more.
-          </p>
+          {isLocal ? (
+            localProToggle
+          ) : (
+            <p className="text-sm text-slate-500 mb-5">
+              Upgrade to unlock budgets, recurring transactions, exports, and more.
+            </p>
+          )}
 
-          <button
-            onClick={() => openUpgradeModal('')}
-            className="gilt-btn rounded-xl px-4 py-2.5 text-sm flex items-center gap-2"
-          >
-            <Sparkles size={15} /> Upgrade to Pro — $4.99/mo
-          </button>
+          {!isLocal && (
+            <>
+              <button
+                onClick={() => openUpgradeModal('')}
+                className="gilt-btn rounded-xl px-4 py-2.5 text-sm flex items-center gap-2"
+              >
+                <Sparkles size={15} /> Upgrade to Pro — $4.99/mo
+              </button>
 
-          <p className="text-[11px] text-slate-500 mt-3">
-            Pay with card (Stripe) or ABA KHQR — your choice at checkout.
-          </p>
+              <p className="text-[11px] text-slate-500 mt-3">
+                Pay with card (Stripe) or ABA KHQR — your choice at checkout.
+              </p>
+            </>
+          )}
         </>
       )}
     </div>

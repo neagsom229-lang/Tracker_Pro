@@ -1,5 +1,12 @@
+import toast from 'react-hot-toast';
 import { useMemo, useCallback } from 'react';
 import { useStore, selectGoalTotals } from '../store/useStore';
+import { isLocalBackend } from '../api/client';
+
+// Local mode: goals are phase 2 — writes are no-ops with a toast, never
+// an ErrorBoundary throw (the store has no goal actions yet, and the local
+// schema has no goals tables).
+const LOCAL_GOALS_MSG = 'Goals are not available in local mode yet (phase 2).';
 
 /**
  * useGoals()
@@ -30,8 +37,8 @@ function daysUntil(isoDate) {
 export function useGoals() {
   const goals = useStore((s) => s.goals);
   const addGoalAction = useStore((s) => s.addGoal);
-  const removeGoal = useStore((s) => s.removeGoal);
-  const contributeToGoal = useStore((s) => s.contributeToGoal);
+  const storeRemoveGoal = useStore((s) => s.removeGoal);
+  const storeContributeToGoal = useStore((s) => s.contributeToGoal);
 
   const enriched = useMemo(
     () =>
@@ -68,6 +75,10 @@ export function useGoals() {
   // an instant message instead of a round trip to a CHECK constraint.
   const addGoal = useCallback(
     ({ name, targetAmount, deadline }) => {
+      if (isLocalBackend()) {
+        toast.error(LOCAL_GOALS_MSG);
+        return;
+      }
       const cleanName = (name || '').trim();
       const amount = Number(targetAmount);
       if (!cleanName) throw new Error('Give your goal a name.');
@@ -75,6 +86,28 @@ export function useGoals() {
       return addGoalAction({ name: cleanName.slice(0, 60), targetAmount: amount, deadline: deadline || null });
     },
     [addGoalAction]
+  );
+
+  const removeGoal = useCallback(
+    (id) => {
+      if (isLocalBackend()) {
+        toast.error(LOCAL_GOALS_MSG);
+        return;
+      }
+      return storeRemoveGoal?.(id);
+    },
+    [storeRemoveGoal]
+  );
+
+  const contributeToGoal = useCallback(
+    (id, amount) => {
+      if (isLocalBackend()) {
+        toast.error(LOCAL_GOALS_MSG);
+        return;
+      }
+      return storeContributeToGoal?.(id, amount);
+    },
+    [storeContributeToGoal]
   );
 
   return { goals: enriched, totals, addGoal, removeGoal, contributeToGoal };

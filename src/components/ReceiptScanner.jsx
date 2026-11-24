@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Camera, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { parseReceiptImage } from '../lib/ai';
+import { parseReceiptImage } from '../lib/Ai';
 import { useProStatus } from '../hooks/useProStatus';
 import { useStore } from '../store/useStore';
 

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { api, isLocalBackend } from '../api/client';
 
 /**
  * dataProvider.js (Supabase edition)
@@ -100,6 +101,7 @@ const PAGE_SIZE = 1000; // matches PostgREST's default max-rows cap
 export const dataProvider = {
   // ---------------- Transactions ----------------
   async getTransactions(userId) {
+    if (isLocalBackend()) return safeFetch('loading transactions', [], () => api.transactions.get());
     return safeFetch('loading transactions', [], async () => {
       const all = [];
       let from = 0;
@@ -120,6 +122,16 @@ export const dataProvider = {
   },
 
   async addTransaction(userId, payload) {
+    if (isLocalBackend()) {
+      return safeFetch('adding the transaction', null, () =>
+        api.transactions.add({
+          description: payload.description,
+          amount: payload.amount,
+          category: payload.category,
+          date: payload.date,
+        })
+      );
+    }
     return withWriteRetry(async () => {
       const { data, error } = await supabase
         .from('transactions')
@@ -138,6 +150,13 @@ export const dataProvider = {
   },
 
   async updateTransaction(id, changes) {
+    if (isLocalBackend()) {
+      const patch = {};
+      for (const key of ['description', 'amount', 'category', 'date']) {
+        if (changes[key] !== undefined) patch[key] = changes[key];
+      }
+      return safeFetch('updating the transaction', null, () => api.transactions.update(id, patch));
+    }
     return withWriteRetry(async () => {
       const { data, error } = await supabase
         .from('transactions')
@@ -156,6 +175,9 @@ export const dataProvider = {
   },
 
   async deleteTransaction(id) {
+    if (isLocalBackend()) {
+      return safeFetch('deleting the transaction', id, () => api.transactions.remove(id).then(() => id));
+    }
     return withWriteRetry(async () => {
       const { error } = await supabase.from('transactions').delete().eq('id', id);
       assertNoError(error, 'deleting the transaction');
@@ -165,6 +187,7 @@ export const dataProvider = {
 
   // ---------------- Budgets ----------------
   async getBudgets(userId) {
+    if (isLocalBackend()) return safeFetch('loading budgets', {}, () => api.budgets.get());
     return safeFetch('loading budgets', {}, async () => {
       const { data, error } = await supabase.from('budgets').select('category, monthly_limit').eq('user_id', userId);
       if (error) throw error;
@@ -173,6 +196,7 @@ export const dataProvider = {
   },
 
   async setBudget(userId, category, limit) {
+    if (isLocalBackend()) return safeFetch('saving the budget', null, () => api.budgets.upsert(category, limit));
     return withWriteRetry(async () => {
       const { error } = await supabase
         .from('budgets')
@@ -182,6 +206,7 @@ export const dataProvider = {
   },
 
   async removeBudget(userId, category) {
+    if (isLocalBackend()) return safeFetch('removing the budget', null, () => api.budgets.remove(category));
     return withWriteRetry(async () => {
       const { error } = await supabase.from('budgets').delete().eq('user_id', userId).eq('category', category);
       assertNoError(error, 'removing the budget');
@@ -190,6 +215,7 @@ export const dataProvider = {
 
   // ---------------- Recurring rules ----------------
   async getRecurring(userId) {
+    if (isLocalBackend()) return safeFetch('loading recurring rules', [], () => api.recurring.get());
     return safeFetch('loading recurring rules', [], async () => {
       const { data, error } = await supabase
         .from('recurring_rules')
@@ -209,6 +235,7 @@ export const dataProvider = {
   },
 
   async addRecurring(userId, payload) {
+    if (isLocalBackend()) return safeFetch('adding the recurring rule', null, () => api.recurring.add(payload));
     return withWriteRetry(async () => {
       const { data, error } = await supabase
         .from('recurring_rules')
@@ -235,6 +262,7 @@ export const dataProvider = {
   },
 
   async updateRecurringNextRun(id, nextRunDate) {
+    if (isLocalBackend()) return safeFetch('updating the recurring rule', null, () => api.recurring.update(id, nextRunDate));
     return withWriteRetry(async () => {
       const { error } = await supabase.from('recurring_rules').update({ next_run_date: nextRunDate }).eq('id', id);
       assertNoError(error, 'updating the recurring rule');
@@ -242,6 +270,7 @@ export const dataProvider = {
   },
 
   async removeRecurring(id) {
+    if (isLocalBackend()) return safeFetch('removing the recurring rule', null, () => api.recurring.remove(id));
     return withWriteRetry(async () => {
       const { error } = await supabase.from('recurring_rules').delete().eq('id', id);
       assertNoError(error, 'removing the recurring rule');
@@ -254,6 +283,11 @@ export const dataProvider = {
   // tables in migration 002 — see useProStatus() for how Pro status is
   // read now. This function only returns account-level settings.
   async getProfile(userId) {
+    if (isLocalBackend())
+      return safeFetch('loading your profile', null, async () => {
+        const data = await api.profile.get();
+        return data?.id ? data : null;
+      });
     return safeFetch('loading your profile', null, async () => {
       const { data, error } = await supabase.from('profiles').select('id, email, display_name, currency, is_admin').eq('id', userId).single();
       if (error) throw error;
@@ -268,6 +302,7 @@ export const dataProvider = {
   },
 
   async setCurrency(userId, currency) {
+    if (isLocalBackend()) return safeFetch('saving the currency preference', null, () => api.profile.update(currency));
     return withWriteRetry(async () => {
       const { error } = await supabase.from('profiles').update({ currency }).eq('id', userId);
       assertNoError(error, 'saving your currency preference');
@@ -276,6 +311,7 @@ export const dataProvider = {
 
   // ---------------- Notifications ----------------
   async getNotifications(userId) {
+    if (isLocalBackend()) return safeFetch('loading notifications', [], () => api.notifications.get());
     return safeFetch('loading notifications', [], async () => {
       const { data, error } = await supabase
         .from('notifications')
@@ -296,6 +332,7 @@ export const dataProvider = {
   },
 
   async markNotificationRead(id) {
+    if (isLocalBackend()) return safeFetch('updating that notification', null, () => api.notifications.markRead(id));
     return withWriteRetry(async () => {
       const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id);
       assertNoError(error, 'updating that notification');
@@ -303,6 +340,7 @@ export const dataProvider = {
   },
 
   async markAllNotificationsRead(userId) {
+    if (isLocalBackend()) return safeFetch('updating your notifications', null, () => api.notifications.markAllRead());
     return withWriteRetry(async () => {
       const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
       assertNoError(error, 'updating your notifications');
@@ -311,6 +349,7 @@ export const dataProvider = {
 
   // ---------------- Quick Add parse corrections ----------------
   async getParseCorrections(userId) {
+    if (isLocalBackend()) return safeFetch('loading your Quick Add corrections', {}, () => api.parseCorrections.get());
     return safeFetch('loading your Quick Add corrections', {}, async () => {
       const { data, error } = await supabase.from('parse_corrections').select('pattern_key, corrected_category').eq('user_id', userId);
       if (error) throw error;
@@ -319,6 +358,9 @@ export const dataProvider = {
   },
 
   async saveParseCorrection(userId, patternKey, correctedCategory) {
+    if (isLocalBackend()) {
+      return safeFetch('saving that correction', null, () => api.parseCorrections.save(patternKey, correctedCategory));
+    }
     // Upsert on (user_id, pattern_key) — matches the unique constraint
     // in the migration, so correcting the same keyword twice updates
     // the existing row instead of erroring or duplicating.
@@ -335,6 +377,7 @@ export const dataProvider = {
 
   // ---------------- Net worth (assets & debts) ----------------
   async getAssets(userId) {
+    if (isLocalBackend()) return safeFetch('loading your assets', [], () => api.assets.get());
     return safeFetch('loading your assets', [], async () => {
       const { data, error } = await supabase
         .from('assets')
@@ -347,6 +390,7 @@ export const dataProvider = {
   },
 
   async addAsset(userId, payload) {
+    if (isLocalBackend()) throw new Error('Assets are not available in local mode yet (phase 2).');
     return withWriteRetry(async () => {
       const { data, error } = await supabase
         .from('assets')
@@ -359,6 +403,7 @@ export const dataProvider = {
   },
 
   async removeAsset(id) {
+    if (isLocalBackend()) throw new Error('Assets are not available in local mode yet (phase 2).');
     return withWriteRetry(async () => {
       const { error } = await supabase.from('assets').delete().eq('id', id);
       assertNoError(error, 'removing that');
@@ -368,6 +413,7 @@ export const dataProvider = {
   // Last 90 days — enough for a meaningful trend line without loading
   // an ever-growing history for someone who's used this for years.
   async getNetWorthHistory(userId) {
+    if (isLocalBackend()) return safeFetch('loading your net worth history', [], () => api.netWorth.get());
     return safeFetch('loading your net worth history', [], async () => {
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);

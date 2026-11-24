@@ -4,7 +4,7 @@ import { Wand2, Loader2, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
 import { useProStatus } from '../hooks/useProStatus';
-import { parseTransactionText } from '../lib/ai';
+import { parseTransactionText } from '../lib/Ai';
 import { parseQuickAddText } from '../utils/parseQuickAdd';
 import { setLastQuickAddDefaults } from '../utils/quickAddDefaults';
 import { CATEGORIES, getCategory } from '../utils/constants';

@@ -1,8 +1,14 @@
-﻿import { useMemo, useState } from 'react';
+﻿import toast from 'react-hot-toast';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Landmark, Plus, Trash2, TrendingDown, PartyPopper } from 'lucide-react';
 import { useStore, selectDebtTotals } from '../store/useStore';
+import { isLocalBackend } from '../api/client';
 import { formatMoney } from '../utils/format';
+
+// Local mode: debts are phase 2 — writes are no-ops with a toast, never
+// an ErrorBoundary throw (the store has no debt actions yet).
+const LOCAL_DEBTS_MSG = 'Debts are not available in local mode yet (phase 2).';
 
 const INPUT_CLASS =
   'w-full bg-card border border-white/8 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 ' +
@@ -162,9 +168,23 @@ function DebtRow({ debt, currency, onPay, onRemove }) {
 export default function DebtManager() {
   const debts = useStore((s) => s.debts);
   const currency = useStore((s) => s.profile?.currency || 'USD');
-  const addDebt = useStore((s) => s.addDebt);
-  const removeDebt = useStore((s) => s.removeDebt);
-  const logDebtPayment = useStore((s) => s.logDebtPayment);
+  const storeAddDebt = useStore((s) => s.addDebt);
+  const storeRemoveDebt = useStore((s) => s.removeDebt);
+  const storeLogDebtPayment = useStore((s) => s.logDebtPayment);
+
+  // Local-mode guards: no debt actions exist yet — toast instead of throw.
+  const addDebt = (payload) => {
+    if (isLocalBackend()) { toast.error(LOCAL_DEBTS_MSG); return; }
+    return storeAddDebt?.(payload);
+  };
+  const removeDebt = (id) => {
+    if (isLocalBackend()) { toast.error(LOCAL_DEBTS_MSG); return; }
+    return storeRemoveDebt?.(id);
+  };
+  const logDebtPayment = (id, value) => {
+    if (isLocalBackend()) { toast.error(LOCAL_DEBTS_MSG); return; }
+    return storeLogDebtPayment?.(id, value);
+  };
 
   const totals = useMemo(() => selectDebtTotals(debts), [debts]);
 

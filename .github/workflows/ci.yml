@@ -2,26 +2,52 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
-  ci:
+  verify:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: tracker_test
+          POSTGRES_PASSWORD: tracker_test_password
+          POSTGRES_DB: tracker_db_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tracker_test -d tracker_db_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: development
+      ENABLE_DEV_PRO_TOGGLE: "true"
+      VITE_SUPABASE_URL: https://placeholder.supabase.co
+      VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: tracker_db_test
+      TEST_PGDATABASE: tracker_db_test
+      PGUSER: tracker_test
+      PGPASSWORD: tracker_test_password
+      # Throwaway CI-only value (32+ chars). Never a real secret.
+      JWT_SECRET: ci-only-jwt-secret-0123456789abcdef
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
+
       - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
-      - name: Install Playwright browsers
-        run: npx playwright install chromium
-      - name: Start preview server
-        run: |
-          npx vite preview --port 4173 --strictPort &
-          sleep 10
-      - run: npm run ui:check
-      - run: npm run keyboard:check
+
+      - name: Install Playwright Chromium (used by smoke:local)
+        run: npx playwright install --with-deps chromium
+
+      - run: npm run verify
