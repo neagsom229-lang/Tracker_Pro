@@ -26,7 +26,6 @@ export default defineConfig({
         'src/components/**',
         'src/hooks/**',
         'src/lib/Ai.js',
-        'src/lib/aba.js',
         'src/lib/dataProvider.js',
         'src/lib/manualPayment.js',
         'src/lib/supabaseClient.js',

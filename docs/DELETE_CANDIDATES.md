@@ -37,9 +37,26 @@
 4. `scripts/show-set-cookie.mjs` — deleted (unreferenced debug script).
 5. `src/lib/aba.js` — deleted after grep confirmed no imports.
 
+## Step 2 Review Additions (evidence-based)
+
+| Item | Evidence | Risk | Action |
+|---|---|---|---|
+| `supabase/functions/create-aba-payment/` | No src refs; only referenced by `aba-webhook` and deferred migration 006. PayWay API deferred; `src/lib/aba.js` removed. | Low-medium; recoverable from git. | **DELETED** |
+| `supabase/functions/aba-webhook/` | PayWay webhook; no src refs; paired with create-aba-payment. | Low-medium. | **DELETED** |
+| `src/components/AbaPaywayFlow.jsx` | Actually manual ABA flow (static KHQR, reference submission to `manual_payments`). Name misleading. | Low. | **RENAMED** to `ManualAbaFlow.jsx`; imports updated. |
+| QR underpayment check | `ManualAbaFlow` uses static KHQR payload (no encoded amount). It records `amount_usd` as plan price; admin UI shows amount and instructs "Check your ABA app for this amount and reference before approving". | **Residual risk:** static QR cannot enforce paid amount; admin must verify actual ABA transfer amount. | **Documented risk**; admin review shows amount. Consider dynamic KHQR/amount-encoded payload in future. |
+| `vitest.config.js` coverage exclude `src/lib/aba.js` | File deleted in Step 2. | None. | **REMOVED** |
+| `supabase/functions/daily-digest/` | No src callers; notifications/digest DEFERRED. `supabase/config.toml` had `[functions.daily-digest]`. | Low; deferred feature. | **DELETED**; config entry removed. |
+| `supabase/functions/notify-admin-payment/` | No src callers found; DEFERRED. | Low. | **DELETED** |
+| `src/components/NotificationBell.jsx` + `src/hooks/useNotifications.js` | Notifications DEFERRED; bell only used in `TopBar.jsx`; hook only used by bell. | Low UI change; deferred feature. | **DELETED**; removed from `TopBar`. |
+| `supabase/functions/parse-receipt/` + `ReceiptScanner` | `ReceiptScanner` used in `TransactionModal`; `Ai.js` calls parse-receipt. Receipt/AI scan adjacent to deferred AI Quick Add. | Medium - visible product change. | **DEFER** (feature-flag/remove only with explicit scope decision). |
+| `supabase/migrations/003 bank sync.sql` | Bank sync DEFERRED; no UI callers found. | Migration history. | **KEEP migration**; no UI to remove. |
+| `docs/` size ~11.21 MB (screenshots) | Large binary-like assets in repo. | Repo bloat. | **PROPOSE** move to Git LFS or external artifact storage; **do not delete without asking**. |
+
 ## Verification
 
-- `npm run verify` PASS after deletions (check:imports, lint, 10/51 unit, 5/34 integration, build, smoke:local). No regressions observed.
+- `npm run verify` PASS after Step 2 review changes (check:imports, lint, 10/51 unit, 5/34 integration, build, smoke:local).
+- `NODE_ENV=production npm run build` (real prod bundle): `charts-D_J1HEID.js` **567.56 kB / 159.17 kB gzip**, `index-Dybv0reI.js` 210.25 kB / 71.06 kB gzip, `motion-BUiYvD9h.js` 123.04 kB / 40.89 kB gzip, `supabase-Pf0Abwmk.js` 224.17 kB / 58.66 kB gzip. Confirms Issue #13.
 
 ## Not Deleted (false positives / risky / deferred)
 

@@ -24,5 +24,4 @@ verify_jwt = false   # Stripe calls this with no Supabase session at all
 [functions.customer-portal]
 verify_jwt = true    # called from the logged-in app via fetch with the user's own token
 
-[functions.daily-digest]
 verify_jwt = false   # called by pg_cron with no session; gated by a shared secret instead
