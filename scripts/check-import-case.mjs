@@ -1,34 +1,63 @@
-﻿// check-import-case.mjs - minimal import case check
-// Verifies that known import paths have correct filename case.
-// Run with: node scripts/check-import-case.mjs
+﻿// scripts/check-import-case.mjs — fails on any relative import whose path
+// does not match the real file names with exact case (Linux is case-sensitive).
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
-import { readFileSync } from 'fs';
-
+const root = process.cwd();
+const ROOTS = ['src', 'server', 'scripts'];
+const EXTS = ['', '.js', '.jsx', '.mjs', '.cjs', '.json', '.css'];
+const SOURCE = /\.(js|jsx|mjs|cjs)$/;
+const IMPORT_RE =
+  /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g;
 const failures = [];
 
-// Check the two known case-sensitive imports
-const checks = [
-  { file: 'src/components/AIQuickAdd.jsx', import: '../lib/Ai', desc: 'Ai.js file' },
-  { file: 'src/components/ReceiptScanner.jsx', import: '../lib/Ai', desc: 'Ai.js file' },
-];
+// Exact-case existence: compare each path segment with the real directory listing.
+function existsExact(abs) {
+  let cur = root;
+  for (const part of relative(root, abs).split(sep)) {
+    let names;
+    try {
+      names = readdirSync(cur);
+    } catch {
+      return false;
+    }
+    if (!names.includes(part)) return false;
+    cur = join(cur, part);
+  }
+  return true;
+}
 
-for (const c of checks) {
-  const content = readFileSync(c.file, 'utf-8');
-  if (!content.includes(c.import)) {
-    failures.push({ file: c.file, import: c.import, reason: 'Import path not found (may already be fixed)' });
-  } else if (c.import === '../lib/ai') {
-    // Only flag if it's the old lowercase version
-    failures.push({ file: c.file, import: c.import, reason: 'Uses ../lib/ai but file is Ai.js (capital A)' });
+function resolves(abs) {
+  for (const ext of EXTS) {
+    const p = abs + ext;
+    if (existsExact(p) && statSync(p).isFile()) return true;
+  }
+  return ['index.js', 'index.jsx', 'index.mjs'].some((i) => existsExact(join(abs, i)));
+}
+
+function check(file) {
+  const text = readFileSync(file, 'utf8');
+  for (const m of text.matchAll(IMPORT_RE)) {
+    const spec = m[1].split('?')[0];
+    if (!resolves(resolve(dirname(file), spec))) {
+      failures.push(`${relative(root, file)}: ${spec}`);
+    }
   }
 }
 
-if (failures.length > 0) {
-  console.log('FAILURES (' + failures.length + '):');
-  for (const f of failures) {
-    console.log('  ' + f.file + ' import ' + f.import + ' -> ' + f.reason);
+function walk(dir) {
+  for (const name of readdirSync(dir)) {
+    if (name === 'node_modules' || name === 'dist') continue;
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walk(p);
+    else if (SOURCE.test(name)) check(p);
   }
+}
+
+for (const r of ROOTS) if (existsSync(r)) walk(r);
+
+if (failures.length) {
+  console.error('Import case/path problems:\n' + failures.join('\n'));
   process.exit(1);
-} else {
-  console.log('All import paths have correct case.');
-  process.exit(0);
 }
+console.log('check:imports OK');
