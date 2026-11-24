@@ -108,8 +108,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title || 'Obsidian', {
       body: payload.body || '',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/icon.svg',
+      badge: '/icons/icon.svg',
       data: { url: payload.url || '/' },
       // Collapses repeats of the same alert instead of stacking them.
       tag: payload.tag || 'obsidian',
