@@ -39,7 +39,7 @@
 
 ## Verification
 
-- Pending: `npm run verify` after deletions.
+- `npm run verify` PASS after deletions (check:imports, lint, 10/51 unit, 5/34 integration, build, smoke:local). No regressions observed.
 
 ## Not Deleted (false positives / risky / deferred)
 
