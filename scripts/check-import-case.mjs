@@ -36,7 +36,9 @@ function resolves(abs) {
 }
 
 function check(file) {
-  const text = readFileSync(file, 'utf8');
+    const text = readFileSync(file, 'utf8')
+    .replace(/^\s*\/\*[\s\S]*?\*\//gm, '')
+    .replace(/^\s*\/\/.*$/gm, '');
   for (const m of text.matchAll(IMPORT_RE)) {
     const spec = m[1].split('?')[0];
     if (!resolves(resolve(dirname(file), spec))) {
