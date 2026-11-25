@@ -13,6 +13,7 @@ const migration006 = readFileSync(new URL('../supabase/migrations/20261124000600
 const migrationGuard = readFileSync(new URL('../supabase/migrations/20261125000100_guard_manual_payment_fields.sql', import.meta.url), 'utf8');
 const USER_A = '00000000-0000-0000-0000-00000000ca01';
 const ADMIN = '00000000-0000-0000-0000-00000000cad1';
+let isSuper = false;
 
 function makeSupabaseMock(clientState) {
   const from = (table) => {
@@ -69,6 +70,8 @@ function makeSupabaseMock(clientState) {
 beforeAll(async () => {
   const c = await pool.connect();
   try {
+    const { rows } = await c.query("SELECT usesuper FROM pg_user WHERE usename = current_user");
+    isSuper = !!rows[0]?.usesuper;
     await c.query(`CREATE SCHEMA IF NOT EXISTS auth`);
     await c.query(`CREATE SCHEMA IF NOT EXISTS storage`);
     await c.query(`CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid $$`);
@@ -101,7 +104,13 @@ beforeAll(async () => {
     // apply real migrations
     await c.query(migration006);
     await c.query(migrationGuard);
-  } finally { c.release(); }
+    if (isSuper) {
+      await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; END $$`);
+      await c.query(`GRANT USAGE ON SCHEMA public TO authenticated`);
+      await c.query(`GRANT SELECT, UPDATE, INSERT ON public.manual_payments TO authenticated`);
+      await c.query(`GRANT SELECT ON public.profiles TO authenticated`);
+    }
+  } finally { await c.query('RESET ROLE').catch(() => {}); c.release(); }
 });
 
 afterAll(async () => {
@@ -109,26 +118,40 @@ afterAll(async () => {
   await pool.end();
 });
 
+async function asUser(c, userId) {
+  await c.query('RESET ROLE');
+  if (isSuper) await c.query('SET LOCAL ROLE authenticated');
+  if (!isSuper) { await c.query('ALTER TABLE public.manual_payments ENABLE ROW LEVEL SECURITY'); await c.query('ALTER TABLE public.manual_payments FORCE ROW LEVEL SECURITY'); }
+  await c.query(`SELECT set_config('request.jwt.claim.sub',$1,true), set_config('request.jwt.claim.role','authenticated',true)`, [userId]);
+}
+async function asPrivileged(c) {
+  await c.query('RESET ROLE');
+  await c.query(`SELECT set_config('request.jwt.claim.role','service_role',true), set_config('request.jwt.claim.sub','',true)`);
+  if (!isSuper) await c.query('ALTER TABLE public.manual_payments DISABLE ROW LEVEL SECURITY');
+}
+
 describe('manual payment client/schema contract', () => {
   it('submitPaymentProof updates the new-schema columns', async () => {
     const c = await pool.connect();
     const state = { client: c };
     try {
       await c.query('BEGIN');
-      await c.query(`SELECT set_config('request.jwt.claim.sub',$1,true), set_config('request.jwt.claim.role','service_role',true)`, [USER_A]);
+      await asPrivileged(c);
       const { rows } = await c.query(`INSERT INTO public.manual_payments (user_id, amount, currency, status) VALUES ($1,4.99,'USD','pending') RETURNING id`, [USER_A]);
-      await c.query(`SELECT set_config('request.jwt.claim.role','authenticated',true)`);
+      await asUser(c, USER_A);
       vi.resetModules();
       vi.doMock('../src/lib/supabaseClient.js', () => ({ supabase: makeSupabaseMock(state) }));
       const { submitPaymentProof } = await import('../src/lib/manualPayment.js');
       await submitPaymentProof(rows[0].id, { transactionRef: 'REF-123', screenshotFile: null });
+      await asPrivileged(c);
       const after = (await c.query(`SELECT status, claimed_transaction_ref, amount, currency FROM public.manual_payments WHERE id=$1`, [rows[0].id])).rows[0];
       expect(after.status).toBe('submitted');
       expect(after.claimed_transaction_ref).toBe('REF-123');
       expect(Number(after.amount)).toBe(4.99);
       expect(after.currency).toBe('USD');
       await c.query('ROLLBACK');
-    } finally { c.release(); vi.doUnmock('../src/lib/supabaseClient.js'); }
+    } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }
+    finally { c.release(); vi.doUnmock('../src/lib/supabaseClient.js'); }
   });
 
   it('getSubmittedPayments reads the new-schema columns', async () => {
@@ -136,8 +159,11 @@ describe('manual payment client/schema contract', () => {
     const state = { client: c };
     try {
       await c.query('BEGIN');
-      await c.query(`SELECT set_config('request.jwt.claim.role','service_role',true)`);
+      await asPrivileged(c);
       await c.query(`INSERT INTO public.manual_payments (user_id, amount, currency, status, claimed_transaction_ref, submitted_at) VALUES ($1,4.99,'USD','submitted','REFX',now())`, [USER_A]);
+      await asPrivileged(c);
+      await c.query(`UPDATE public.profiles SET is_admin=true WHERE id=$1`, [ADMIN]);
+      await asUser(c, ADMIN); // admin can read all submitted
       vi.resetModules();
       vi.doMock('../src/lib/supabaseClient.js', () => ({ supabase: makeSupabaseMock(state) }));
       const { getSubmittedPayments } = await import('../src/lib/manualPayment.js');
@@ -155,7 +181,9 @@ describe('manual payment client/schema contract', () => {
     const c = await pool.connect();
     try {
       await c.query('BEGIN');
+      await asPrivileged(c);
       await c.query(`INSERT INTO public.manual_payments (user_id, amount, currency, status, claimed_transaction_ref) VALUES ($1,4.99,'USD','pending','REFP')`, [USER_A]);
+      await asUser(c, USER_A);
       const { rows } = await c.query(`SELECT id, amount, currency, status, claimed_transaction_ref, created_at FROM public.manual_payments WHERE user_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT 1`, [USER_A]);
       expect(Number(rows[0].amount)).toBe(4.99);
       expect(rows[0].currency).toBe('USD');

@@ -44,6 +44,26 @@ serve(async (req) => {
       return jsonResponse({ error: 'Manual payment is not configured yet.' }, 500);
     }
 
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+    // Simple per-user rate limit: max 5 creates per hour.
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentCount, error: rateError } = await admin
+      .from('manual_payments')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', since);
+    if (rateError) {
+      console.error('manual_payments rate limit check failed:', rateError.message);
+      return jsonResponse({ error: 'Could not start the payment — try again.' }, 500);
+    }
+    if ((recentCount ?? 0) >= 5) {
+      return jsonResponse({ error: 'Too many payment attempts. Please wait an hour and try again.' }, 429);
+    }
+
+    // Remove stale pending rows that were never submitted/approved/rejected.
+    await admin.from('manual_payments').delete().eq('user_id', user.id).eq('status', 'pending');
+
     const individualInfo = new IndividualInfo(bakongAccountId, merchantName, merchantCity, {
       currency: 840, // 840 = USD, 116 = KHR, per the KHQR/EMVCo currency code table
       amount,
@@ -61,7 +81,6 @@ serve(async (req) => {
       return jsonResponse({ error: 'Could not generate a payment QR — try again.' }, 500);
     }
 
-    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const { data: payment, error: insertError } = await admin
       .from('manual_payments')
       .insert({ user_id: user.id, amount, currency: 'USD', khqr_md5: result.data.md5, status: 'pending' })

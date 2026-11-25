@@ -144,7 +144,10 @@ export default function ManualAbaFlow({ onBack, onSuccess }) {
               ) : qr ? (
                 <AbaQrImage value={qr} size={224} />
               ) : (
-                <div className="w-[224px] h-[224px] rounded-2xl bg-white/5 flex items-center justify-center text-xs text-slate-500">QR unavailable</div>
+                <div className="w-[224px] h-[224px] rounded-2xl bg-white/5 flex flex-col items-center justify-center gap-3 text-xs text-slate-500 px-4 text-center">
+                  <span>{error || 'QR unavailable'}</span>
+                  <button onClick={handleRefreshQr} className="gilt-btn rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5"><RefreshCw size={12} /> Try again</button>
+                </div>
               )}
               <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${secondsLeft <= 30 ? 'text-expense border-expense/40 bg-expense/10' : 'text-slate-400 border-white/10 bg-white/5'}`}>
                 <Clock size={12} /> Expires in {formatTime(secondsLeft)}
