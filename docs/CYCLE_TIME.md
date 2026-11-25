@@ -25,9 +25,18 @@ Measured on local Windows dev machine (Node 22, npm, Playwright Chromium install
 | CI step-level NODE_ENV split | Build uses production; db reset/integration/smoke use development | Done |
 | Production dist smoke (`smoke:preview`) in CI | Catches broken production bundle before deploy confidence | Done |
 
-## After (local measurement, same machine)
+## After (CI run - pending)
 
-Local command timings unchanged by CI cache changes (cache helps CI runner). Measured after changes:
+Replace this section with real GitHub Actions timings after PR is opened and CI runs.
+
+| Job/Step | Before | After | Notes |
+|---|---:|---:|---|
+| verify / npm ci | TBD (PR CI) | TBD (PR CI) | npm cache already enabled |
+| verify / Playwright install | TBD | TBD | browser cache added |
+| verify / total | TBD | TBD |  |
+| supabase-migrations / total | n/a | TBD | new job: setup-cli + start + db reset + assertions |
+
+## Local measurement (same machine, reference only)
 
 | Command | Time (s) |
 |---|---:|
@@ -41,6 +50,5 @@ Local command timings unchanged by CI cache changes (cache helps CI runner). Mea
 
 ## Remaining Step 4 items
 
-- Measure CI runner before/after on actual GitHub Actions PR run (user to open PR and paste results).
+- Paste real CI step timings from PR run into "After (CI run)" table.
 - Point post-deploy smoke against Vercel Preview URL (Step 5 / CI deploy workflow).
-- Consider splitting integration tests or parallelizing independent jobs only if CI time becomes a problem; current suite is small (~14s local).

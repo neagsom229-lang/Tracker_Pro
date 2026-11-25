@@ -85,3 +85,24 @@ jobs:
         env:
           NODE_ENV: development
         run: npm run smoke:preview
+
+  supabase-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start Supabase (local)
+        run: supabase start
+      - name: Reset and apply migrations
+        run: supabase db reset --yes
+      - name: Assert migration guards
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/assert-supabase-migrations.mjs

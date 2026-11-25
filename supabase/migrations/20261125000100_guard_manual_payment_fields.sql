@@ -1,12 +1,16 @@
 -- Harden manual_payments against client-side tampering.
--- Existing guard_manual_payment_status only prevented self-approval/rejection.
--- This trigger additionally prevents non-service_role from changing protected
--- fields, limits edits to pending rows, and only allows pending -> submitted.
+-- - Trusted server/SQL operators (service_role, postgres, supabase_admin) may update.
+-- - Regular users may only move pending -> submitted, and only while pending.
+-- - Protected fields are reverted for regular users.
+-- - submitted_at is set server-side on pending -> submitted.
 
 create or replace function public.guard_manual_payment_fields()
 returns trigger as $$
 begin
-  if auth.role() = 'service_role' then
+  -- Trusted server/SQL operator contexts. SQL editor runs as postgres/supabase_admin
+  -- without an authenticated end-user JWT role.
+  if auth.role() = 'service_role'
+     or (session_user in ('postgres', 'supabase_admin') and auth.role() is distinct from 'authenticated') then
     return new;
   end if;
 
@@ -34,7 +38,9 @@ begin
   new.user_id := old.user_id;
 
   -- Only pending -> submitted is allowed from the client.
-  if new.status not in ('pending', 'submitted') then
+  if new.status = 'submitted' then
+    new.submitted_at := now();
+  elsif new.status <> 'pending' then
     new.status := old.status;
   end if;
 
@@ -44,6 +50,7 @@ $$ language plpgsql security definer;
 
 drop trigger if exists guard_manual_payment_status on public.manual_payments;
 drop trigger if exists guard_manual_payment_fields on public.manual_payments;
+drop function if exists public.guard_manual_payment_status();
 create trigger guard_manual_payment_fields
   before update on public.manual_payments
   for each row execute function public.guard_manual_payment_fields();

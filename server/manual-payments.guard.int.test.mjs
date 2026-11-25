@@ -18,6 +18,8 @@ const USER_A = '00000000-0000-0000-0000-0000000000a1';
 const USER_B = '00000000-0000-0000-0000-0000000000b2';
 const ADMIN = '00000000-0000-0000-0000-0000000000ad';
 
+let isSuper = false;
+
 async function withTx(fn) {
   const c = await pool.connect();
   try {
@@ -34,12 +36,33 @@ async function withTx(fn) {
 }
 
 async function asUser(c, userId, role = 'authenticated') {
-  await c.query(`SELECT set_config('request.jwt.claim.sub', $1, true), set_config('request.jwt.claim.role', $2, true)`, [userId, role]);
+  await c.query('RESET ROLE');
+  if (isSuper) await c.query('SET LOCAL ROLE authenticated');
+  await c.query(
+    `SELECT set_config('request.jwt.claim.sub', $1, true), set_config('request.jwt.claim.role', $2, true)`,
+    [userId, role],
+  );
+}
+
+async function asPrivileged(c) {
+  await c.query('RESET ROLE');
+  await c.query(`SELECT set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claim.role', 'service_role', true)`);
+  if (!isSuper) await c.query('ALTER TABLE public.manual_payments DISABLE ROW LEVEL SECURITY');
+}
+
+async function restoreRls(c) {
+  if (!isSuper) {
+    await c.query('ALTER TABLE public.manual_payments ENABLE ROW LEVEL SECURITY');
+    await c.query('ALTER TABLE public.manual_payments FORCE ROW LEVEL SECURITY');
+  }
 }
 
 beforeAll(async () => {
   const c = await pool.connect();
   try {
+    const { rows } = await c.query("SELECT usesuper FROM pg_user WHERE usename = current_user");
+    isSuper = !!rows[0]?.usesuper;
+
     await c.query(`CREATE SCHEMA IF NOT EXISTS auth`);
     await c.query(`CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid $$`);
     await c.query(`CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT coalesce(NULLIF(current_setting('request.jwt.claim.role', true), ''), 'authenticated') $$`);
@@ -49,6 +72,7 @@ beforeAll(async () => {
     await c.query(`ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin boolean not null default false`);
     await c.query(`INSERT INTO public.profiles (id) VALUES ($1),($2),($3) ON CONFLICT (id) DO NOTHING`, [USER_A, USER_B, ADMIN]);
     await c.query(`UPDATE public.profiles SET is_admin = CASE id WHEN $3::uuid THEN true ELSE false END WHERE id IN ($1,$2,$3)`, [USER_A, USER_B, ADMIN]);
+
     await c.query(`DROP TABLE IF EXISTS public.manual_payments CASCADE`);
     await c.query(`
       CREATE TABLE public.manual_payments (
@@ -70,10 +94,16 @@ beforeAll(async () => {
     await c.query(`CREATE POLICY "Users can view own manual payments" ON public.manual_payments FOR SELECT USING (auth.uid() = user_id)`);
     await c.query(`CREATE POLICY "Admins can view all manual payments" ON public.manual_payments FOR SELECT USING (exists (select 1 from public.profiles where id = auth.uid() and is_admin))`);
     await c.query(`CREATE POLICY "Users can submit proof on own pending payment" ON public.manual_payments FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id)`);
-    // Apply the real guard migration
     await c.query(migrationSql);
+
+    if (isSuper) {
+      await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; END $$`);
+      await c.query(`GRANT USAGE ON SCHEMA public TO authenticated`);
+      await c.query(`GRANT SELECT, UPDATE, INSERT ON public.manual_payments TO authenticated`);
+      await c.query(`GRANT SELECT ON public.profiles TO authenticated`);
+    }
   } finally {
-    await c.query("SET session_replication_role = 'origin'").catch(() => {});
+    await c.query('RESET ROLE').catch(() => {});
     c.release();
   }
 });
@@ -84,7 +114,7 @@ afterAll(async () => {
 });
 
 async function seedPayment(c, overrides = {}) {
-  await c.query(`ALTER TABLE public.manual_payments DISABLE ROW LEVEL SECURITY`);
+  await asPrivileged(c);
   const row = {
     user_id: USER_A, amount: 4.99, currency: 'USD', status: 'pending',
     khqr_md5: 'md5hash', claimed_transaction_ref: null, screenshot_path: null,
@@ -95,16 +125,14 @@ async function seedPayment(c, overrides = {}) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
     [row.user_id,row.amount,row.currency,row.status,row.khqr_md5,row.claimed_transaction_ref,row.screenshot_path,row.submitted_at,row.reviewed_by,row.reviewed_at],
   );
-  await c.query(`ALTER TABLE public.manual_payments ENABLE ROW LEVEL SECURITY`);
-  await c.query(`ALTER TABLE public.manual_payments FORCE ROW LEVEL SECURITY`);
+  await restoreRls(c);
   return rows[0];
 }
 
 async function readPayment(c, id) {
-  await c.query(`ALTER TABLE public.manual_payments DISABLE ROW LEVEL SECURITY`);
+  await asPrivileged(c);
   const { rows } = await c.query(`SELECT * FROM public.manual_payments WHERE id=$1`, [id]);
-  await c.query(`ALTER TABLE public.manual_payments ENABLE ROW LEVEL SECURITY`);
-  await c.query(`ALTER TABLE public.manual_payments FORCE ROW LEVEL SECURITY`);
+  await restoreRls(c);
   return rows[0];
 }
 
@@ -151,6 +179,19 @@ describe('manual_payments guard trigger', () => {
       const after = await readPayment(c, p.id);
       expect(after.status).toBe('pending');
       expect(after.claimed_transaction_ref).toBeNull();
+    });
+  });
+
+  it('sets submitted_at server-side on pending -> submitted', async () => {
+    await withTx(async (c) => {
+      const p = await seedPayment(c, { user_id: USER_A });
+      await asUser(c, USER_A);
+      await c.query(`UPDATE public.manual_payments SET status='submitted', claimed_transaction_ref='REF123', submitted_at='2000-01-01T00:00:00Z' WHERE id=$1`, [p.id]);
+      const after = await readPayment(c, p.id);
+      expect(after.status).toBe('submitted');
+      expect(after.claimed_transaction_ref).toBe('REF123');
+      expect(after.submitted_at).not.toBeNull();
+      expect(new Date(after.submitted_at).toISOString()).not.toBe('2000-01-01T00:00:00.000Z');
     });
   });
 });
