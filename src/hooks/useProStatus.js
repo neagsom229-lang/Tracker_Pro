@@ -140,7 +140,7 @@ async function fetchAll() {
       .maybeSingle(),
     supabase
       .from('manual_payments')
-      .select('id, plan, amount_usd, reference, status, created_at')
+      .select('id, amount, currency, status, claimed_transaction_ref, created_at')
       .eq('user_id', user.id)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
