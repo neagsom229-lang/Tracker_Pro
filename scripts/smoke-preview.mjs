@@ -68,20 +68,28 @@ try {
   browser = await chromium.launch();
   const page = await browser.newPage();
   const pageErrors = [];
+  const consoleErrors = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
+  page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
-  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(1500);
-  const rootHtml = await page.content();
-  assert.ok(rootHtml.includes('id="root"'), 'index should contain app root');
+  await page.goto(BASE + '/', { waitUntil: 'load', timeout: 30000 });
+  await page.waitForFunction(() => {
+    const t = document.body.innerText || '';
+    return /sign in|create account|welcome back|obsidian|email|password/i.test(t);
+  }, { timeout: 15000 });
+  const homeText = await page.locator('body').innerText();
+  assert.ok(homeText.length > 20, 'home page should render visible content');
 
   await page.goto(BASE + '/dashboard', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(1500);
   const dashboardUrl = page.url();
-  assert.ok(dashboardUrl.includes('/dashboard') || dashboardUrl.endsWith('/'), 'deep link should load without server 404');
+  const dashboardText = await page.locator('body').innerText();
+  assert.ok(dashboardUrl.includes('/dashboard') || dashboardUrl.endsWith('/') || dashboardUrl.includes('/login'), 'deep link should load without server 404');
+  assert.ok(dashboardText.length > 20, 'dashboard/deep link should render visible content');
 
-  console.log(JSON.stringify({ ok: true, base: BASE, checks, dashboardUrl, pageErrors }, null, 2));
-  assert.equal(pageErrors.length, 0, `page errors: ${pageErrors.join(' | ')}`);
+  const allErrors = [...pageErrors, ...consoleErrors];
+  console.log(JSON.stringify({ ok: true, base: BASE, checks, dashboardUrl, pageErrors, consoleErrors, zeroConsoleErrors: allErrors.length === 0 }, null, 2));
+  assert.equal(allErrors.length, 0, `console/page errors: ${allErrors.join(' | ')}`);
 } finally {
   if (browser) await browser.close();
   killTree(preview);
