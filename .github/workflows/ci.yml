@@ -24,7 +24,6 @@ jobs:
           --health-retries 10
 
     env:
-      NODE_ENV: production
       ENABLE_DEV_PRO_TOGGLE: "true"
       VITE_SUPABASE_URL: https://placeholder.supabase.co
       VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
@@ -66,7 +65,11 @@ jobs:
         env:
           NODE_ENV: production
         run: npm run build
-      - name: Smoke local
+      - name: Smoke local (dev server)
         env:
           NODE_ENV: development
         run: npm run smoke:local
+      - name: Smoke preview (production dist)
+        env:
+          NODE_ENV: development
+        run: npm run smoke:preview

@@ -19,6 +19,7 @@
     "assets:check": "node scripts/check-assets.mjs",
     "smoke": "node scripts/smoke.mjs",
     "smoke:local": "node scripts/smoke-local.mjs",
+    "smoke:preview": "node scripts/smoke-preview.mjs",
     "verify": "npm run check:imports && npm run assets:check && npm run lint && npm run test:unit && npm run db:reset:test && npm run test:integration && npm run build && npm run smoke:local",
     "coverage": "vitest run --coverage",
     "db:migrate": "node --env-file-if-exists=.env server/db-migrate.js",
