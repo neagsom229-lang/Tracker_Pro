@@ -24,7 +24,7 @@ jobs:
           --health-retries 10
 
     env:
-      NODE_ENV: development
+      NODE_ENV: production
       ENABLE_DEV_PRO_TOGGLE: "true"
       VITE_SUPABASE_URL: https://placeholder.supabase.co
       VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
@@ -50,4 +50,23 @@ jobs:
       - name: Install Playwright Chromium (used by smoke:local)
         run: npx playwright install --with-deps chromium
 
-      - run: npm run verify
+      - run: npm run check:imports
+      - run: npm run assets:check
+      - run: npm run lint
+      - run: npm run test:unit
+      - name: Reset test DB
+        env:
+          NODE_ENV: development
+        run: npm run db:reset:test
+      - name: Integration tests
+        env:
+          NODE_ENV: development
+        run: npm run test:integration
+      - name: Build (production)
+        env:
+          NODE_ENV: production
+        run: npm run build
+      - name: Smoke local
+        env:
+          NODE_ENV: development
+        run: npm run smoke:local

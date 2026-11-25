@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "node scripts/dev-all.mjs",
-    "prebuild": "node scripts/check-vercel-env.mjs",
     "build": "node scripts/check-vercel-env.mjs && vite build",
     "preview": "vite preview",
     "test": "npm run test:unit && npm run test:integration",

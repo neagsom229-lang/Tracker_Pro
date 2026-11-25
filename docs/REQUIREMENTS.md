@@ -14,7 +14,7 @@ Everything required for launch must directly support this promise for real, auth
 
 | Decision | Confirmed answer |
 |---|---|
-| Stripe mode | **TEST mode for private beta**. Move link to `VITE_STRIPE_PAYMENT_LINK`. Switch to live only after one full test-mode payment works end to end. ⚠ confirm before live switch. |
+| Stripe mode | **TEST mode for private beta**. Link in `VITE_STRIPE_PAYMENT_LINK`. Vercel production build fails if link contains `test_` unless `ALLOW_TEST_STRIPE_ON_PRODUCTION=true` (option 2, confirmed). Remove override before live switch. |
 | ABA | **Keep existing MANUAL flow for launch** (admin approves). **DEFER** PayWay API (`006 aba payway` migration). |
 | Production backend | **Express + local Postgres (`/server`) is dev/test only**, never deployed on Vercel. |
 | Launch scope | **MUST:** auth (email + Google login), transactions, budgets, dashboard, export, billing/Pro gating. **SHOULD:** recurring, goals, debts, multi-currency. **DEFER:** bank sync, notifications/push, daily-digest, AI Quick Add unless it works against Supabase staging; net worth only if complete. ⚠ adjust to product as needed. |
@@ -109,6 +109,7 @@ Command (PowerShell): `npm ci; if ($LASTEXITCODE -eq 0) { npm run verify } else 
 - **Supabase staging:** provide guided commands containing no secrets; do not touch any real project or run `db push` without explicit approval each time.
 - **Push/PR:** push `chore/production-readiness` and open PR; `origin/main` is currently at `c19379d` and lacks these commits.
 - **Bundle measurement:** re-measure bundle sizes under `NODE_ENV=production` before Step 3F; only lazy-load charts if Lighthouse still shows a problem.
+- **OPEN ITEM (admin alerts):** `notify-admin-payment` edge function was removed during Step 2 cleanup (DEFERRED). Manual ABA launch still requires admin awareness of submitted payments; decide replacement before launch: in-app admin queue polling/refresh only, email/webhook alert, or restore a minimal notify function. Track as launch blocker for manual ABA ops.
 
 ## 8) Step 1 Exit
 

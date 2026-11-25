@@ -12,6 +12,16 @@ if (process.env.VERCEL) {
     console.error('Build stopped: VITE_DATA_BACKEND=local must not be set in production.');
     process.exit(1);
   }
-  // Private beta is currently TEST mode on Vercel production. Do not hard-fail
-  // on test_ links until the user explicitly confirms live-switch enforcement.
+  const stripeLink = process.env.VITE_STRIPE_PAYMENT_LINK || '';
+  const allowTestStripe = process.env.ALLOW_TEST_STRIPE_ON_PRODUCTION === 'true';
+  if (
+    process.env.VERCEL_ENV === 'production' &&
+    stripeLink.includes('test_') &&
+    !allowTestStripe
+  ) {
+    console.error(
+      'Build stopped: VITE_STRIPE_PAYMENT_LINK appears to be a Stripe test link in VERCEL_ENV=production. Set ALLOW_TEST_STRIPE_ON_PRODUCTION=true only for approved private-beta test mode.',
+    );
+    process.exit(1);
+  }
 }

@@ -6,6 +6,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 const root = process.cwd();
 const errors = [];
@@ -19,6 +20,7 @@ function checkFile(file, refs) {
   for (const ref of refs) {
     if (!ref.startsWith('/')) continue;
     if (ref.startsWith('//')) continue;
+    if (ref.endsWith('/')) continue; // prefix/pattern, not a concrete file
     if (!exists(ref)) errors.push(`${file}: missing asset ${ref}`);
   }
 }
@@ -41,6 +43,16 @@ checkFile(
   'public/service-worker.js',
   swRefs.filter((r) => !r.startsWith('/functions/')),
 );
+
+// TOML parse check for Supabase config (catches duplicate keys / syntax errors).
+try {
+  execSync('python -c "import tomllib; tomllib.load(open(\'supabase/config.toml\',\'rb\')); print(\'toml ok\')"', {
+    cwd: root,
+    stdio: 'pipe',
+  });
+} catch (e) {
+  errors.push(`supabase/config.toml: invalid TOML (${e.stderr?.toString().trim() || e.message})`);
+}
 
 if (errors.length) {
   console.error('check-assets FAILED:');
