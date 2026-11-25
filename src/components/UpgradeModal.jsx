@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { redirectToPaymentLink } from '../lib/stripe';
-import AbaPaywayFlow from './AbaPaywayFlow';
+import ManualAbaFlow from './ManualAbaFlow';
 
 const PRO_PERKS = [
   'Monthly budgeting goals with overspend alerts',
@@ -135,7 +135,7 @@ export default function UpgradeModal() {
               )}
 
               {step === 'aba' && (
-                <AbaPaywayFlow
+                <ManualAbaFlow
                   plan="monthly"
                   onBack={() => setStep('choose')}
                   onSuccess={handleClose}

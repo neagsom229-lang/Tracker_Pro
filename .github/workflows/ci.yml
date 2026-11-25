@@ -24,7 +24,6 @@ jobs:
           --health-retries 10
 
     env:
-      NODE_ENV: development
       ENABLE_DEV_PRO_TOGGLE: "true"
       VITE_SUPABASE_URL: https://placeholder.supabase.co
       VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
@@ -45,9 +44,65 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - run: npm ci
 
       - name: Install Playwright Chromium (used by smoke:local)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
-      - run: npm run verify
+      - name: Install Playwright OS deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - run: npm run check:imports
+      - run: npm run assets:check
+      - run: npm run lint
+      - run: npm run test:unit
+      - name: Reset test DB
+        env:
+          NODE_ENV: development
+        run: npm run db:reset:test
+      - name: Integration tests
+        env:
+          NODE_ENV: development
+        run: npm run test:integration
+      - name: Build (production)
+        env:
+          NODE_ENV: production
+        run: npm run build
+      - name: Smoke local (dev server)
+        env:
+          NODE_ENV: development
+        run: npm run smoke:local
+      - name: Smoke preview (production dist)
+        env:
+          NODE_ENV: development
+        run: npm run smoke:preview
+
+  supabase-migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start Supabase (local)
+        run: supabase start
+      - name: Reset and apply migrations
+        run: supabase db reset --yes
+      - name: Assert migration guards
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/assert-supabase-migrations.mjs

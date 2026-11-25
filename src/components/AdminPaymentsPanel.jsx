@@ -4,6 +4,8 @@ import { Check, X, ExternalLink, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getSubmittedPayments, getPaymentProofUrl, reviewManualPayment } from '../lib/manualPayment';
 
+const EXPECTED_PLAN_PRICE = { USD: 4.99 };
+
 export default function AdminPaymentsPanel() {
   const [payments, setPayments] = useState(null); // null = loading
   const [actingOn, setActingOn] = useState(null); // payment id currently being approved/rejected
@@ -57,7 +59,13 @@ export default function AdminPaymentsPanel() {
               <p className="text-slate-200 font-medium">{p.payerLabel}</p>
               <p className="text-xs text-slate-500">Submitted {new Date(p.submittedAt).toLocaleString()}</p>
             </div>
-            <p className="text-lg font-semibold text-slate-100 tabular-nums">${p.amount}</p>
+            <div className="text-right">
+              <p className="text-lg font-semibold text-slate-100 tabular-nums">${Number(p.amount).toFixed(2)}</p>
+              <p className="text-xs text-slate-500">Expected ${EXPECTED_PLAN_PRICE.USD.toFixed(2)} USD</p>
+              {Number(p.amount) !== EXPECTED_PLAN_PRICE.USD && (
+                <p className="text-xs text-amber-400">Amount mismatch</p>
+              )}
+            </div>
           </div>
 
           <div className="text-sm text-slate-400 mb-4 space-y-1">

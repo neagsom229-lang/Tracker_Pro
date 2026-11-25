@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    setupFiles: ['src/test/setupEnv.js'],
     define: {
       'process.env.VITE_SUPABASE_URL': 'https://placeholder.supabase.co',
       'process.env.VITE_SUPABASE_ANON_KEY': 'placeholder-anon-key-for-ci',
@@ -26,7 +27,6 @@ export default defineConfig({
         'src/components/**',
         'src/hooks/**',
         'src/lib/Ai.js',
-        'src/lib/aba.js',
         'src/lib/dataProvider.js',
         'src/lib/manualPayment.js',
         'src/lib/supabaseClient.js',

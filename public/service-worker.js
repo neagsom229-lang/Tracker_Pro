@@ -16,7 +16,7 @@
  * offline", not "the app pretends it has your data".
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `obsidian-shell-${VERSION}`;
 
 // Only the entry point is precached. Vite fingerprints every asset
@@ -71,7 +71,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: stale-while-revalidate.
+  // Hashed build assets: cache-first (immutable filenames). Only cache real
+  // static assets; Vercel SPA rewrites can return index.html (200, text/html)
+  // for missing files, which must never be cached as an asset.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.open(SHELL_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const response = await fetch(request);
+        const ct = (response.headers.get('content-type') || '').toLowerCase();
+        const isStaticAsset = /javascript|css|font|woff|ttf|otf|wasm|image\//.test(ct);
+        if (response.ok && response.type === 'basic' && !ct.includes('text/html') && isStaticAsset) {
+          cache.put(request, response.clone());
+        }
+        return response;
+      }),
+    );
+    return;
+  }
+
+  // Other same-origin static assets: stale-while-revalidate.
   event.respondWith(
     caches.open(SHELL_CACHE).then(async (cache) => {
       const cached = await cache.match(request);
@@ -81,56 +101,9 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => cached);
-
       return cached || network;
-    })
+    }),
   );
 });
 
-/* ---------------------------------------------------------------------
- * Web push hooks.
- *
- * These handlers are correct and complete, but nothing will call them
- * until you register a push subscription and send from a server (see the
- * README section on push). They're here so that wiring a provider later
- * is a server-side job only — no service-worker changes needed.
- * ------------------------------------------------------------------- */
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  let payload;
-  try {
-    payload = event.data.json();
-  } catch {
-    payload = { title: 'Obsidian', body: event.data.text() };
-  }
-
-  event.waitUntil(
-    self.registration.showNotification(payload.title || 'Obsidian', {
-      body: payload.body || '',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
-      data: { url: payload.url || '/' },
-      // Collapses repeats of the same alert instead of stacking them.
-      tag: payload.tag || 'obsidian',
-    })
-  );
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const target = event.notification.data?.url || '/';
-
-  // Focus an existing tab if one is open rather than spawning a new one.
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(target);
-          return client.focus();
-        }
-      }
-      return self.clients.openWindow(target);
-    })
-  );
-});
+// Push handlers removed: notifications/push are deferred (Step 1 scope).

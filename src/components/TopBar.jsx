@@ -1,6 +1,5 @@
 import { Plus, Sun, Moon } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import NotificationBell from './NotificationBell';
 
 const TITLES = {
   dashboard: 'Dashboard',
@@ -38,7 +37,6 @@ export default function TopBar({ activeView }) {
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <NotificationBell />
         {showAddButton && (
           <button
             onClick={() => openTransactionModal()}

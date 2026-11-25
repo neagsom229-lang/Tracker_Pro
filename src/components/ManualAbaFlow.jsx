@@ -20,7 +20,7 @@ function formatTime(secs) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export default function AbaPaywayFlow({ plan = 'monthly', onBack, onSuccess }) {
+export default function ManualAbaFlow({ plan = 'monthly', onBack, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [reference, setReference] = useState('');
