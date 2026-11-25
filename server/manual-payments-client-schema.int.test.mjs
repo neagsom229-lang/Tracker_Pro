@@ -11,6 +11,7 @@ if (!db.endsWith('_test')) throw new Error(`Refusing non-test DB: ${db}`);
 const pool = new Pool({ host: env.PGHOST, port: Number(env.PGPORT), database: db, user: env.PGUSER, password: env.PGPASSWORD });
 const migration006 = readFileSync(new URL('../supabase/migrations/20261124000600_manual_aba_payments.sql', import.meta.url), 'utf8');
 const migrationGuard = readFileSync(new URL('../supabase/migrations/20261125000100_guard_manual_payment_fields.sql', import.meta.url), 'utf8');
+const migrationExpired = readFileSync(new URL('../supabase/migrations/20261125000300_manual_payments_expired_status.sql', import.meta.url), 'utf8');
 const USER_A = '00000000-0000-0000-0000-00000000ca01';
 const ADMIN = '00000000-0000-0000-0000-00000000cad1';
 let isSuper = false;
@@ -104,6 +105,7 @@ beforeAll(async () => {
     // apply real migrations
     await c.query(migration006);
     await c.query(migrationGuard);
+    await c.query(migrationExpired);
     if (isSuper) {
       await c.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; END $$`);
       await c.query(`GRANT USAGE ON SCHEMA public TO authenticated`);
