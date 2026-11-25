@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { validateTransactionPayload } from '../utils/validateTransaction';
 
 /**
  * Calls the parse-transaction Edge Function with the user's own access
@@ -24,6 +25,7 @@ export async function parseTransactionText(text) {
 
   const data = await res.json().catch(() => ({ error: 'Something went wrong — try again.' }));
   if (!res.ok) throw new Error(data.error || 'Something went wrong — try again.');
+  if (validateTransactionPayload(data)) throw new Error("Couldn't understand that — try rephrasing.");
   return data; // { description, amount, category, date }
 }
 
@@ -48,5 +50,6 @@ export async function parseReceiptImage(imageBase64) {
 
   const data = await res.json().catch(() => ({ error: 'Something went wrong — try again.' }));
   if (!res.ok) throw new Error(data.error || 'Something went wrong — try again.');
+  if (validateTransactionPayload(data)) throw new Error("Couldn't read that receipt — try a clearer photo.");
   return data; // { description, amount, category, date }
 }

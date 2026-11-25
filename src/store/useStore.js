@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { dataProvider } from '../lib/dataProvider';
 import { api, isLocalBackend } from '../api/client';
 import { addInterval, todayISO } from '../utils/recurrence';
+import { validateTransactionPayload } from '../utils/validateTransaction';
 
 /**
  * useStore
@@ -169,6 +170,8 @@ export const useStore = create((set, get) => ({
 
   // ---------------- Transaction CRUD (optimistic) ----------------
   addTransaction: async (payload) => {
+    const problem = validateTransactionPayload(payload);
+    if (problem) { toast.error(problem); return; }
     const userId = get().session.id;
     const tempId = `temp-${Date.now()}`;
     const optimistic = { id: tempId, createdAt: new Date().toISOString(), ...payload };
@@ -516,7 +519,9 @@ export const selectSpendingByCategory = (transactions) => {
 
 export const selectSpendingThisMonth = (transactions) => {
   const currentMonth = new Date().toISOString().slice(0, 7);
-  return selectSpendingByCategory(transactions.filter((t) => t.date.slice(0, 7) === currentMonth));
+  return selectSpendingByCategory(
+    transactions.filter((t) => typeof t?.date === 'string' && t.date.slice(0, 7) === currentMonth),
+  );
 };
 
 export const selectUnreadCount = (notifications) => notifications.filter((n) => !n.read).length;
