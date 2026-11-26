@@ -30,6 +30,12 @@
 import { serve } from 'https://deno.land/std@0.203.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  getAiDailyLimit,
+  getAiQuotaErrorMessage,
+  getAiQuotaIncrement,
+  isAiQuotaExceeded,
+} from '../_shared/aiQuota.ts';
 
 // Keep this in sync with `CATEGORIES` in src/utils/constants.js. Edge
 // Functions run in a separate Deno deployment from the Vite app, so
@@ -80,6 +86,54 @@ serve(async (req) => {
     if (!openaiKey) {
       console.error('OPENAI_API_KEY is not set in this project\'s Edge Function secrets.');
       return jsonResponse({ error: 'AI Quick Add is not configured yet.' }, 500);
+    }
+
+    // ---- Daily quota (checked BEFORE any OpenAI call) -------------------
+    // ai_usage is SELECT-only for users, so all of this runs with the
+    // service role. Pro is derived from a live subscription row, never
+    // from a client claim. The pure rules live in _shared/aiQuota.ts and
+    // are unit-tested in src/lib/aiQuota.test.js.
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const { data: activeSub } = await admin
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
+      .limit(1)
+      .maybeSingle();
+    const isPro = !!activeSub;
+    const limit = getAiDailyLimit(isPro, {
+      AI_DAILY_LIMIT_FREE: Deno.env.get('AI_DAILY_LIMIT_FREE') ?? undefined,
+      AI_DAILY_LIMIT_PRO: Deno.env.get('AI_DAILY_LIMIT_PRO') ?? undefined,
+    });
+
+    const { data: usage, error: usageError } = await admin
+      .from('ai_usage')
+      .select('count')
+      .eq('user_id', user.id)
+      .eq('usage_date', todayISO)
+      .maybeSingle();
+    if (usageError) {
+      console.error('ai_usage quota lookup failed:', usageError.message);
+      return jsonResponse({ error: 'Could not check your AI quota — try again shortly.' }, 500);
+    }
+
+    if (isAiQuotaExceeded(usage?.count ?? 0, limit)) {
+      // Over quota: return early — no OpenAI request, no cost.
+      return jsonResponse({ error: getAiQuotaErrorMessage(limit, isPro) }, 429);
+    }
+
+    // Reserve the request atomically before calling OpenAI. If the OpenAI
+    // call later fails, the attempt still counts — otherwise a client
+    // could hammer the endpoint and race past the limit.
+    const { error: reserveError } = await admin.rpc('increment_ai_usage', getAiQuotaIncrement(user.id, todayISO));
+    if (reserveError) {
+      console.error('ai_usage increment failed:', reserveError.message);
+      return jsonResponse({ error: 'Could not reserve an AI request — try again shortly.' }, 500);
     }
 
     const systemPrompt = `You turn one sentence describing a single expense or income event into JSON.
