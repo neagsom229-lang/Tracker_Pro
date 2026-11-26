@@ -79,7 +79,7 @@ serve(async (req) => {
 
       const subValues = {
         status: 'active',
-        plan_name: 'Pro (ABA PayWay)',
+        plan_name: 'Pro (ABA manual)',
         current_period_end: periodEnd.toISOString(),
         source: 'manual_aba',
         last_event_ts: Math.floor(Date.now() / 1000),
