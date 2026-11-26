@@ -17,6 +17,7 @@ import { serve } from 'https://deno.land/std@0.203.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { BakongKHQR, IndividualInfo } from 'npm:bakong-khqr@1.0.6';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getPendingCleanupUpdate, getRateLimitSince, shouldBlockManualPaymentCreate } from '../_shared/manualPaymentRules.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
@@ -44,6 +45,26 @@ serve(async (req) => {
       return jsonResponse({ error: 'Manual payment is not configured yet.' }, 500);
     }
 
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+    // Simple per-user rate limit: max 5 creates per hour, counting all rows.
+    const since = getRateLimitSince();
+    const { count: recentCount, error: rateError } = await admin
+      .from('manual_payments')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', since);
+    if (rateError) {
+      console.error('manual_payments rate limit check failed:', rateError.message);
+      return jsonResponse({ error: 'Could not start the payment — try again.' }, 500);
+    }
+    if (shouldBlockManualPaymentCreate(recentCount ?? 0)) {
+      return jsonResponse({ error: 'Too many payment attempts. Please wait an hour and try again.' }, 429);
+    }
+
+    // Mark stale pending rows as expired (service role only).
+    await admin.from('manual_payments').update(getPendingCleanupUpdate()).eq('user_id', user.id).eq('status', 'pending');
+
     const individualInfo = new IndividualInfo(bakongAccountId, merchantName, merchantCity, {
       currency: 840, // 840 = USD, 116 = KHR, per the KHQR/EMVCo currency code table
       amount,
@@ -61,7 +82,6 @@ serve(async (req) => {
       return jsonResponse({ error: 'Could not generate a payment QR — try again.' }, 500);
     }
 
-    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     const { data: payment, error: insertError } = await admin
       .from('manual_payments')
       .insert({ user_id: user.id, amount, currency: 'USD', khqr_md5: result.data.md5, status: 'pending' })

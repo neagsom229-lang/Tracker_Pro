@@ -74,7 +74,11 @@ export default function BillingPanel() {
     </div>
   );
 
-  const provider = subscription?.payment_provider || 'stripe'; // 'stripe' | 'aba' | 'aba_manual' | 'local'
+  // Remote `subscriptions` rows carry `payment_provider`; rows written by
+  // our review-manual-payment function only carry source='manual_aba'.
+  // Fall back to the source so manual ABA rows still get the ABA affordance.
+  const provider =
+    subscription?.payment_provider ?? (subscription?.source === 'manual_aba' ? 'aba_manual' : 'stripe'); // 'stripe' | 'aba' | 'aba_manual' | 'local'
 
   const handleManage = async () => {
     if (provider === 'local') {
@@ -190,13 +194,13 @@ export default function BillingPanel() {
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Reference</span>
                     <span className="text-slate-200 font-mono truncate max-w-[140px]">
-                      {pendingPayment?.reference || '—'}
+                      {pendingPayment?.claimed_transaction_ref || '—'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Amount</span>
                     <span className="text-slate-200 font-medium">
-                      ${Number(pendingPayment?.amount_usd || 0).toFixed(2)}
+                      {pendingPayment?.currency || 'USD'} {Number(pendingPayment?.amount || 0).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
