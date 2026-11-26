@@ -106,3 +106,7 @@ jobs:
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: node scripts/assert-supabase-migrations.mjs
+      - name: Assert manual payment reconciliation
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/assert-manual-payments-reconcile.mjs
