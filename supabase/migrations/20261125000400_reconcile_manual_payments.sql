@@ -33,6 +33,13 @@ begin
   ) into has_reference;
 
   if has_amount_usd or has_reference then
+    -- guard_manual_payment_fields only bypasses session_user
+    -- postgres/supabase_admin, or auth.role() = 'service_role'. A
+    -- migration applied by any other login role would otherwise have its
+    -- backfill UPDATEs silently reverted by that trigger, so execute the
+    -- whole backfill as service_role and restore the session afterwards.
+    perform set_config('request.jwt.claim.role', 'service_role', true);
+
     if has_amount_usd then
       execute 'update public.manual_payments
                   set amount = amount_usd
@@ -45,16 +52,22 @@ begin
                 where claimed_transaction_ref is null and reference is not null';
     end if;
 
-    -- A row with no amount can never be a real payment. Pending rows can
-    -- safely be discarded; anything further along must be looked at by a
-    -- human rather than guessed at here.
-    execute 'delete from public.manual_payments where amount is null and status = ''pending''';
+    -- Only a row with NO source amount at all is discardable. If the
+    -- backfill failed for any other reason the row must survive so the
+    -- NOT NULL step below raises — never delete it and pretend it was
+    -- empty.
+    if has_amount_usd then
+      execute 'delete from public.manual_payments
+                where amount is null and amount_usd is null and status = ''pending''';
+    end if;
 
     if exists (select 1 from public.manual_payments where amount is null) then
       raise exception 'manual_payments: non-pending row(s) with NULL amount remain after backfill — refusing to guess';
     end if;
 
     execute 'alter table public.manual_payments alter column amount set not null';
+
+    perform set_config('request.jwt.claim.role', '', true);
   end if;
 end $$;
 
@@ -155,6 +168,52 @@ create table if not exists public.ai_usage (
 
 alter table public.ai_usage enable row level security;
 
+-- The remote table predates the quota code and can hold more than one row
+-- for the same (user_id, usage_date). Merge duplicates before adding the
+-- unique index so the RPC's ON CONFLICT can do its job.
+do $$
+declare
+  has_duplicates boolean;
+begin
+  select exists (
+    select 1 from public.ai_usage
+    group by user_id, usage_date
+    having count(*) > 1
+  ) into has_duplicates;
+
+  if has_duplicates then
+    -- Materialise the totals and the ctid to keep ONCE. An UPDATE gives the
+    -- surviving row a new ctid, so recomputing min(ctid) afterwards (or in
+    -- a second CTE) would delete the row we just merged into.
+    create temp table ai_usage_merge on commit drop as
+      select user_id, usage_date,
+             sum(count)::integer as total_count,
+             min(ctid) as keep_ctid
+      from public.ai_usage
+      group by user_id, usage_date
+      having count(*) > 1;
+
+    delete from public.ai_usage a
+     using ai_usage_merge m
+     where a.user_id = m.user_id
+       and a.usage_date = m.usage_date
+       and a.ctid <> m.keep_ctid;
+
+    update public.ai_usage a
+       set count = m.total_count
+      from ai_usage_merge m
+     where a.user_id = m.user_id
+       and a.usage_date = m.usage_date
+       and a.ctid = m.keep_ctid;
+
+    drop table ai_usage_merge;
+  end if;
+end $$;
+
+create unique index if not exists ai_usage_user_date_key
+  on public.ai_usage (user_id, usage_date);
+
+drop policy if exists ai_usage_select_own on public.ai_usage;
 drop policy if exists "Users can view own AI usage" on public.ai_usage;
 create policy "Users can view own AI usage"
   on public.ai_usage for select

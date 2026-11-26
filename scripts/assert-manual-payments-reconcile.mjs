@@ -47,11 +47,19 @@ function configFor(user, database) {
   };
 }
 
+function makePool(config) {
+  const pool = new pg.Pool(config);
+  // A backend terminated during teardown can otherwise emit an unhandled
+  // 'error' event and mask the real assertion failure.
+  pool.on('error', () => {});
+  return pool;
+}
+
 async function superuserPool() {
   const candidates = [...new Set([connStr ? new URL(connStr).username : env.PGUSER, 'postgres'])].filter(Boolean);
   const tried = [];
   for (const user of candidates) {
-    const pool = new pg.Pool(configFor(user));
+    const pool = makePool(configFor(user));
     try {
       const { rows } = await pool.query(
         'select current_user, (select rolsuper from pg_roles where rolname = current_user) as super'
@@ -78,16 +86,35 @@ const U1 = '00000000-0000-0000-0000-0000000000a1';
 const U2 = '00000000-0000-0000-0000-0000000000a2';
 
 const dbName = `tracker_reconcile_${process.pid}_${Date.now()}`;
+const NONPG_ROLE = `reconcile_super_${process.pid}`;
+const NONPG_PASSWORD = 'reconcile_test_password';
 let admin;
 let testPool;
+let nonPgPool;
+let activePool;
+
+function configForRole(role, database, password) {
+  const cfg = configFor(role, database);
+  if (cfg.connectionString) {
+    const url = new URL(cfg.connectionString);
+    url.password = password;
+    return { connectionString: url.toString() };
+  }
+  return { ...cfg, password };
+}
 
 async function q(sql, params) {
-  return (await testPool.query(sql, params)).rows;
+  return (await activePool.query(sql, params)).rows;
 }
 
 async function resetPublic() {
   await q('drop schema if exists public cascade; create schema public');
   await q('grant usage on schema public to authenticated, anon');
+  // Storage objects live outside public; their policies would otherwise
+  // collide when a scenario re-applies migration 00600.
+  await q(`drop policy if exists "Users can upload own payment proof" on storage.objects`);
+  await q(`drop policy if exists "Users can view own payment proof" on storage.objects`);
+  await q(`drop policy if exists "Admins can view all payment proofs" on storage.objects`);
 }
 
 async function setupStubs() {
@@ -249,7 +276,12 @@ async function assertCommonShape() {
   const policies = await q(`select policyname, cmd from pg_policies
                             where schemaname='public' and tablename='ai_usage'`);
   assert.deepEqual(policies, [{ policyname: 'Users can view own AI usage', cmd: 'SELECT' }],
-    'ai_usage must be SELECT-only for users');
+    'ai_usage must be SELECT-only for users (legacy ai_usage_select_own must be gone)');
+
+  const index = await q(`select indexname from pg_indexes
+                         where schemaname='public' and tablename='ai_usage'
+                           and indexname='ai_usage_user_date_key'`);
+  assert.equal(index.length, 1, 'ai_usage unique index ai_usage_user_date_key missing');
 
   const fn = await q(`
     select p.prosecdef, p.proconfig::text,
@@ -303,7 +335,7 @@ async function assertCommonShape() {
 
 // Run as a restricted role from a superuser login, exactly as required.
 async function asUser(userId, fn) {
-  const c = await testPool.connect();
+  const c = await activePool.connect();
   try {
     await c.query('BEGIN');
     await c.query('SET LOCAL ROLE authenticated');
@@ -348,7 +380,7 @@ async function freshDbScenario() {
   console.log('  ✓ fresh DB: all migrations apply, 00400 is a no-op');
 }
 
-async function remoteShapedScenario() {
+async function remoteShapedScenario(label = 'postgres login') {
   await resetPublic();
   await setupStubs();
   await seedUsers();
@@ -356,14 +388,16 @@ async function remoteShapedScenario() {
   await q(`insert into public.manual_payments (user_id, amount_usd, reference, status)
            values ($1, 4.99, 'REF-OLD', 'pending')`, [U1]);
 
-  await apply(recentFiles); // 00100 ... 00400
-  const [{ id, amount, claimed_transaction_ref }] = await q(
+  await apply(recentFiles); // 00100 ... 00500
+  const rows = await q(
     `select id, amount, claimed_transaction_ref from public.manual_payments where user_id=$1`, [U1]
   );
+  assert.equal(rows.length, 1, 'pending row was deleted during migration (a failed backfill must raise, not delete)');
+  const [{ id, amount, claimed_transaction_ref }] = rows;
   assert.equal(Number(amount), 4.99, 'amount_usd was not backfilled into amount');
   assert.equal(claimed_transaction_ref, 'REF-OLD', 'reference was not backfilled');
   await assertCommonShape();
-  console.log('  ✓ remote-shaped: hybrid row converted, legacy schema removed');
+  console.log(`  ✓ remote-shaped (${label}): pending row survives with amount 4.99, legacy schema removed`);
 
   // (b) restricted-role checks
   await q(`grant select, insert, update on public.manual_payments to authenticated`);
@@ -412,7 +446,7 @@ async function badRowScenario() {
   await createRemoteShaped();
   await q(`insert into public.manual_payments (user_id, amount_usd, reference, status)
            values ($1, null, 'REF-BAD', 'approved')`, [U1]);
-  await apply(recentFiles.slice(0, -1)); // all but 00400
+  await apply(recentFiles.filter((f) => !/20261125000400|20261125000500/.test(f))); // 00100 ... 00300
 
   let error;
   try {
@@ -425,33 +459,121 @@ async function badRowScenario() {
   console.log('  ✓ non-pending NULL-amount row aborts migration instead of guessing');
 }
 
+async function dedupeScenario() {
+  await resetPublic();
+  await setupStubs();
+  await seedUsers();
+  await apply(allFiles);
+
+  // Reproduce the old remote table: no PK/unique index, two rows per day.
+  await q(`alter table public.ai_usage drop constraint ai_usage_pkey`);
+  await q(`drop index if exists public.ai_usage_user_date_key`);
+  await q(`insert into public.ai_usage (user_id, usage_date, count)
+           values ($1,'2026-11-25',2),($1,'2026-11-25',3)`, [U1]);
+
+  const fixFile = allFiles.find((f) => f.includes('20261125000500'));
+  assert.ok(fixFile, '20261125000500 follow-up migration is missing');
+  await q(reconcileSql);
+  await q(sqlFor(fixFile));
+
+  const rows = await q(`select count from public.ai_usage where user_id=$1 and usage_date='2026-11-25'`, [U1]);
+  assert.equal(rows.length, 1, 'duplicate ai_usage rows were not merged');
+  assert.equal(rows[0].count, 5, 'duplicate ai_usage counts were not summed');
+  await assertCommonShape();
+  console.log('  ✓ ai_usage duplicates summed and unique index enforced');
+}
+
+async function failedBackfillScenario() {
+  await resetPublic();
+  await setupStubs();
+  await seedUsers();
+  await createRemoteShaped();
+  await q(`insert into public.manual_payments (user_id, amount_usd, reference, status)
+           values ($1, 4.99, 'REF-OLD', 'pending')`, [U1]);
+
+  // Simulate an applying role the guard does not trust, even though the
+  // migration sets the JWT claim: the old DELETE would silently drop this
+  // pending row; the fixed version must keep it and abort instead.
+  await q(`create or replace function auth.role() returns text language sql stable as $fn$
+           select 'authenticated'::text
+         $fn$`);
+  await apply(recentFiles.filter((f) => !/20261125000400|20261125000500/.test(f)));
+
+  let error;
+  try {
+    await q(reconcileSql);
+  } catch (err) {
+    error = err;
+  }
+  assert.ok(error, 'a failed backfill must abort the migration');
+  assert.match(error.message, /refusing to guess/, 'unexpected error message');
+
+  const rows = await q(`select amount, amount_usd from public.manual_payments`);
+  assert.equal(rows.length, 1, 'pending row was deleted after a failed backfill');
+  assert.equal(rows[0].amount, null);
+  assert.equal(Number(rows[0].amount_usd), 4.99, 'the source amount should still be there for manual review');
+  console.log('  ✓ failed backfill raises and keeps the pending row intact');
+}
+
+async function cleanup() {
+  if (nonPgPool) {
+    await nonPgPool.end().catch(() => {});
+    nonPgPool = null;
+  }
+  if (testPool) {
+    await testPool.end().catch(() => {});
+    testPool = null;
+  }
+  if (admin) {
+    await admin.query(`select pg_terminate_backend(pid) from pg_stat_activity where datname=$1`, [dbName]).catch(() => {});
+    await admin.query(`drop database if exists ${dbName}`).catch(() => {});
+    await admin.query(`drop role if exists ${NONPG_ROLE}`).catch(() => {});
+    await admin.end().catch(() => {});
+    admin = null;
+  }
+}
+
 async function main() {
   const { pool, user } = await superuserPool();
   admin = pool;
   console.log(`[reconcile-assert] local superuser: ${user}`);
   await admin.query(`create database ${dbName}`);
-  testPool = new pg.Pool(configFor(user, dbName));
+  testPool = makePool(configFor(user, dbName));
+  activePool = testPool;
   try {
     await setupStubs();
     await freshDbScenario();
     await remoteShapedScenario();
     await badRowScenario();
+    await dedupeScenario();
+
+    // Same remote-shaped path again, but logged in as a SUPERUSER whose
+    // name is not postgres: the backfill must still survive the guard
+    // trigger (set_config('request.jwt.claim.role','service_role',true)).
+    await admin.query(`do $do$ begin
+      if not exists (select 1 from pg_roles where rolname='${NONPG_ROLE}') then
+        create role ${NONPG_ROLE} superuser login password '${NONPG_PASSWORD}';
+      end if;
+    end $do$`);
+    nonPgPool = makePool(configForRole(NONPG_ROLE, dbName, NONPG_PASSWORD));
+    const { rows: login } = await nonPgPool.query(
+      `select current_user, (select rolsuper from pg_roles where rolname=current_user) as super`
+    );
+    assert.notEqual(login[0].current_user, 'postgres', 'expected a non-postgres login');
+    assert.equal(login[0].super, true, 'expected a superuser login');
+    activePool = nonPgPool;
+    await remoteShapedScenario('non-postgres superuser login');
+    activePool = testPool;
+    await failedBackfillScenario();
+
     console.log('[reconcile-assert] all reconciliation assertions OK');
   } finally {
-    await testPool.end().catch(() => {});
-    await admin.query(`select pg_terminate_backend(pid) from pg_stat_activity where datname=$1`, [dbName]);
-    await admin.query(`drop database if exists ${dbName}`);
-    await admin.end().catch(() => {});
+    await cleanup();
   }
 }
 
 main().catch(async (err) => {
   console.error('[reconcile-assert] FAILED:', err);
-  if (testPool) await testPool.end().catch(() => {});
-  if (admin) {
-    await admin.query(`select pg_terminate_backend(pid) from pg_stat_activity where datname=$1`, [dbName]).catch(() => {});
-    await admin.query(`drop database if exists ${dbName}`).catch(() => {});
-    await admin.end().catch(() => {});
-  }
+  await cleanup();
   process.exitCode = 1;
 });
