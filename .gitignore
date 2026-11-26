@@ -25,3 +25,5 @@ tracker_db_backup.sql
 
 # uipro-installed skill assets (re-installable via `uipro init`)
 .opencode/
+
+backup*.sql
