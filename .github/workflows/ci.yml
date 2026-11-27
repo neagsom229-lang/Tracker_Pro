@@ -101,7 +101,7 @@ jobs:
       - run: npm ci
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: v3.4.0
       - name: Start Supabase (local)
         run: supabase start
       - name: Reset and apply migrations
