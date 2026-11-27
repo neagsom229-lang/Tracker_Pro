@@ -36,7 +36,16 @@ function configFor(user, database) {
     const url = new URL(connStr);
     if (user) url.username = user;
     if (database) url.pathname = `/${database}`;
-    return { connectionString: url.toString() };
+    // Use PGPASSWORD env var rather than the password embedded in SUPABASE_DB_URL,
+    // so the script works with any PostgreSQL configuration (CI supabase local stack,
+    // Docker containers, etc.).
+    return {
+      host: url.hostname,
+      port: Number(url.port) || Number(env.PGPORT || 5432),
+      database: (url.pathname || '').slice(1) || 'postgres',
+      user: url.username || user || env.PGUSER,
+      password: env.PGPASSWORD,
+    };
   }
   return {
     host: env.PGHOST,
