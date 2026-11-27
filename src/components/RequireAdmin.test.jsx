@@ -4,7 +4,7 @@ import { act } from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import RequireAdmin from './RequireAdmin';
 
-const mockState = { profile: null };
+const mockState = { profile: null, dataLoading: false, dataError: null };
 vi.mock('../store/useStore', () => ({
   useStore: (selector) => selector(mockState),
 }));
@@ -47,21 +47,38 @@ async function cleanup() {
 describe('RequireAdmin', () => {
   beforeEach(() => {
     mockState.profile = null;
+    mockState.dataLoading = false;
+    mockState.dataError = null;
   });
 
-  it('redirects non-admin users to /dashboard', async () => {
+  it('renders a loading placeholder instead of redirecting while data is loading', async () => {
+    mockState.dataLoading = true;
+    mockState.dataError = null;
+    try {
+      await renderAt('/admin');
+      expect(container.textContent).toContain('Loading admin access');
+      expect(container.textContent).not.toContain('admin-panel');
+      expect(container.textContent).not.toContain('dashboard-home');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('renders an error placeholder instead of admin content when data fails to load', async () => {
+    mockState.dataLoading = false;
+    mockState.dataError = 'Failed to load profile';
     mockState.profile = { isAdmin: false };
     try {
       await renderAt('/admin');
-      expect(container.textContent).toContain('dashboard-home');
+      expect(container.textContent).toContain("Couldn't load admin access");
       expect(container.textContent).not.toContain('admin-panel');
     } finally {
       await cleanup();
     }
   });
 
-  it('redirects when profile is missing', async () => {
-    mockState.profile = null;
+  it('redirects non-admin users to /dashboard', async () => {
+    mockState.profile = { isAdmin: false };
     try {
       await renderAt('/admin');
       expect(container.textContent).toContain('dashboard-home');
