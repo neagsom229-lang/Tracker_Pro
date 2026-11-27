@@ -53,6 +53,10 @@ jobs:
 
       - run: npm ci
 
+      - name: Audit production dependencies (report only)
+        continue-on-error: true
+        run: npm audit --omit=dev
+
       - name: Install Playwright Chromium (used by smoke:local)
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
@@ -110,3 +114,14 @@ jobs:
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: node scripts/assert-manual-payments-reconcile.mjs
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
