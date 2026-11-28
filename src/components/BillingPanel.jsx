@@ -74,11 +74,14 @@ export default function BillingPanel() {
     </div>
   );
 
-  // Remote `subscriptions` rows carry `payment_provider`; rows written by
-  // our review-manual-payment function only carry source='manual_aba'.
-  // Fall back to the source so manual ABA rows still get the ABA affordance.
-  const provider =
-    subscription?.payment_provider ?? (subscription?.source === 'manual_aba' ? 'aba_manual' : 'stripe'); // 'stripe' | 'aba' | 'aba_manual' | 'local'
+  // On the remote schema payment_provider is NOT NULL DEFAULT 'stripe', so
+  // `??` would never fall back for manual ABA rows: source wins when it
+  // says manual_aba, otherwise a non-default provider wins, else Stripe.
+  const provider = subscription?.source === 'manual_aba'
+    ? 'aba_manual'
+    : (subscription?.payment_provider && subscription.payment_provider !== 'stripe')
+      ? subscription.payment_provider
+      : 'stripe'; // 'stripe' | 'aba' | 'aba_manual' | 'local'
 
   const handleManage = async () => {
     if (provider === 'local') {

@@ -13,6 +13,7 @@ import MobileNav from './components/MobileNav';
 import TransactionModal from './components/TransactionModal';
 import UpgradeModal from './components/UpgradeModal';
 import CommandPalette from './components/CommandPalette';
+import RequireAdmin from './components/RequireAdmin';
 import DashboardSkeleton from './components/skeletons/DashboardSkeleton';
 import TransactionListSkeleton from './components/skeletons/TransactionListSkeleton';
 
@@ -130,7 +131,7 @@ function AppContent() {
                   <Route path="/debts" element={<DebtManager />} />
                   <Route path="/export" element={<ExportPanel />} />
                   <Route path="/billing" element={<BillingPanel />} />
-                  <Route path="/admin" element={<AdminPaymentsPanel />} />
+                  <Route path="/admin" element={<RequireAdmin><AdminPaymentsPanel /></RequireAdmin>} />
                   <Route path="/networth" element={<NetWorthPage />} />
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
