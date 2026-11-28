@@ -44,7 +44,8 @@ function configFor(user, database) {
       port: Number(url.port) || Number(env.PGPORT || 5432),
       database: (url.pathname || '').slice(1) || 'postgres',
       user: url.username || user || env.PGUSER,
-      password: env.PGPASSWORD,
+            // Prefer an explicit PGPASSWORD; otherwise use the password in the URL.
+      password: env.PGPASSWORD ?? decodeURIComponent(url.password),
     };
   }
   return {
